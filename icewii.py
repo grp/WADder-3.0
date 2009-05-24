@@ -633,7 +633,7 @@ class IMET():
 			self.crypto = Struct.string(16)
 	def __init__(self, f):
 		self.f = f
-	def add(self, iconsz, bannersz, soundsz, name = ">_>", fn = ""): #mode is add or remove
+	def add(self, iconsz, bannersz, soundsz, name = ">_>", fn = "", langs = []): #mode is add or remove
 		data = open(self.f, "rb").read()
 		imet = self.IMETHeader()
 		
@@ -644,8 +644,11 @@ class IMET():
 		imet.sizes[0] = iconsz
 		imet.sizes[1] = bannersz
 		imet.sizes[2] = soundsz
-		for i in range(0, len(imet.names)):
-			imet.names[i] = name
+		for i in range(len(imet.names)):
+			if(len(langs) > 0 and langs[i] != ""):
+				imet.names[i] = langs[i]
+			else:
+				imet.names[i] = name
 		for i in imet.zeroes2:
 			imet.zeroes2[i] = 0x00
 		imet.crypto = "\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00"

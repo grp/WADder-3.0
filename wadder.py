@@ -12,42 +12,59 @@ def debug(text):
 		pass
 		
 def clean():
-	shutil.rmtree("wadunpack")
-	os.unlink("in.wad")
-	os.unlink("out.wad")
-	os.unlink("tmp.png")
+	try:
+		shutil.rmtree("wadunpack")
+		os.unlink("in.wad")
+		os.unlink("out.wad")
+		os.unlink("tmp.png")
+	except OSError:
+		pass
 		
 def doApp(self): #we can ignore self
 	global wadder
 	
 	dol = wadder.opttab.dol.GetValue()
+	if(os.path.exists(dol) != True and dol != ""):
+		wx.MessageBox('DOL selected must exist.', 'Error', wx.OK | wx.ICON_ERROR)
+		return
+		
 	titleid = wadder.opttab.titleid.GetValue()
+	if(len(titleid) != 4 and titleid != ""):
+		wx.MessageBox('Title ID must be four letters and/or numbers.', 'Error', wx.OK | wx.ICON_ERROR)
+		return
+		
 	wad = wadder.wadtab.wad.GetValue()
+	if(os.path.exists(wad) != True):
+		wx.MessageBox('WAD selected must exist and WAD must be entered.', 'Error', wx.OK | wx.ICON_ERROR)
+		return
+		
+	sound = wadder.opttab.sound.GetValue()
+	if(os.path.exists(sound) != True and sound != ""):
+		wx.MessageBox('Sound selected must exist.', 'Error')
+		return
+		
+	title = wadder.titletab.channame.GetValue()
+	if(len(title) > 20):
+		wx.MessageBox('Title must not be longer than 20 characters.', 'Error', wx.OK | wx.ICON_ERROR)
+		return
+		
+	langs = []
+	langs.append(wadder.titletab.jap.GetValue())
+	langs.append(wadder.titletab.eng.GetValue())
+	langs.append(wadder.titletab.get.GetValue())
+	langs.append(wadder.titletab.fra.GetValue())
+	langs.append(wadder.titletab.spa.GetValue())
+	langs.append(wadder.titletab.ita.GetValue())
+	langs.append(wadder.titletab.dut.GetValue())
+	for i in range(7):
+		if(len(langs[i]) > 20):
+			wx.MessageBox('Specific Language title must not be longer than 20 characters.', 'Error', wx.OK | wx.ICON_ERROR)
+			return
 	
-	doWADder(wad)
+	doWADder(wad, titleid, title, sound, dol, nandloader, langs)
+
 	
-	
-	"""
-	$loopval=1
-	$soundval=1
-	$dolval=1
-	$comex = 0
-	
-	If GUICtrlRead(loop):
-		loopval=0
-	If GUICtrlRead($nandloader) == "Comex" Then
-		$comex=0
-	
-	doWADder(GUICtrlRead($wad), GUICtrlRead($channame),  StringUpper(GUICtrlRead($id)), GUICtrlRead($dol), GUICtrlRead($sound), $loopval, $comex)         
-	
-	If titleid != "" Then
-		FileMove("C:\wadtemp\out.wad", FileSaveDialog("Save WAD", @DesktopDir, "WAD Files (*.wad)", 16, GUICtrlRead($channame) & "-" & GUICtrlRead($id) & ".wad"), 1)
-	Else
-		FileMove("C:\wadtemp\out.wad", FileSaveDialog("Save WAD", @DesktopDir, "WAD Files (*.wad)", 16, GUICtrlRead($channame) & ".wad"), 1)
-	"""
-	pass
-	
-def doWADder(wad, titleid = "", title = "Channel by WADder", sound = "", dol = "", nandloader = ""):
+def doWADder(wad, titleid = "", title = "Channel by WADder", sound = "", dol = "", nandloader = "", langs = [], loop = 0):
 	shutil.copy(wad, "in.wad")
 	
 	wii.WAD("in.wad").unpack("wadunpack")
@@ -55,17 +72,21 @@ def doWADder(wad, titleid = "", title = "Channel by WADder", sound = "", dol = "
 	wii.U8(wii.LZ77(wii.IMD5("wadunpack/00000000_app_out/meta/banner.bin").remove()).remove()).unpack()
 	wii.U8(wii.LZ77(wii.IMD5("wadunpack/00000000_app_out/meta/icon.bin").remove()).remove()).unpack()
 	
-	#do sound stuff
+	#do sound stuff, dis is teh hard partz
 		
 	imedit = ImageEditor(redirect=True)
 	imedit.MainLoop()
 
 	wii.IMD5(wii.LZ77(wii.U8("wadunpack/00000000_app_out/meta/banner_bin_out").pack()).add()).add()
 	wii.IMD5(wii.LZ77(wii.U8("wadunpack/00000000_app_out/meta/icon_bin_out").pack()).add()).add()
-	wii.IMET(wii.U8("wadunpack/00000000_app_out").pack()).add(os.path.getsize("wadunpack/00000000_app_out/meta/icon.bin"), os.path.getsize("wadunpack/00000000_app_out/meta/banner.bin"), os.path.getsize("wadunpack/00000000_app_out/meta/sound.bin"), title)
+	wii.IMET(wii.U8("wadunpack/00000000_app_out").pack()).add(os.path.getsize("wadunpack/00000000_app_out/meta/icon.bin"), os.path.getsize("wadunpack/00000000_app_out/meta/banner.bin"), os.path.getsize("wadunpack/00000000_app_out/meta/sound.bin"), title, langs)
 	
 	if(dol != ""):
 		if(nandloader != ""):
+			shutil.copy("wadunpack/00000000.app", "00000000.app")
+			shutil.rmtree("wadunpack")
+			os.mkdir("wadunpack")
+			shutil.copy("00000000.app", "wadunpack/00000000.app")
 			shutil.copytree("data/" + nandloader, "wadunpack")
 		if(nandloader == "Comex"):
 			dolpath = "00000002.app"
@@ -153,13 +174,13 @@ class WADPanel(wx.Panel):
 		wx.Panel.__init__(self, parent, id)
 		
 		wx.StaticText(self, -1, "WAD to edit:", (5, 30))
-		wx.StaticText(self, -1, "Edit the...", (5, 60))
+		#wx.StaticText(self, -1, "Edit the...", (5, 60))
 		
-		self.banner = wx.RadioButton(self, -1, "banner,", (90, 60), style = wx.RB_GROUP)
-		self.icon = wx.RadioButton(self, -1, "icon,", (165, 60))
-		self.both = wx.RadioButton(self, -1, "both,", (225, 60))
-		self.both.SetValue(True)
-		self.neither = wx.RadioButton(self, -1, "or neither?", (285, 60))
+		#self.banner = wx.RadioButton(self, -1, "banner,", (90, 60), style = wx.RB_GROUP)
+		#self.icon = wx.RadioButton(self, -1, "icon,", (165, 60))
+		#self.both = wx.RadioButton(self, -1, "both,", (225, 60))
+		#self.both.SetValue(True)
+		#self.neither = wx.RadioButton(self, -1, "or neither?", (285, 60))
 		
 		wadbtn = wx.Button(self, -1, "Browse...", (340, 30), (80, -1))
 		self.Bind(wx.EVT_BUTTON, self.wadbutton, wadbtn)
@@ -218,7 +239,7 @@ class OptPanel(wx.Panel):
 		soundbtn = wx.Button(self, -1, "Browse...", (340, 100), (80, -1))
 		self.Bind(wx.EVT_BUTTON, self.soundbutton, soundbtn)
 		self.sound = wx.TextCtrl(self, -1, "", (90, 100), (245, -1))
-		self.loop = wx.CheckBox(self, -1, "Loop Sound. Windows only, might not work :(.", (50, 130))
+		#self.loop = wx.CheckBox(self, -1, "Loop Sound. Windows only, might not work :(.", (50, 130))
 		
 		wx.StaticText(self, -1, "These are optional. Fill them in only if you want to change them.", (5, 180))
 		
