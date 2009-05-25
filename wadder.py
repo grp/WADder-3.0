@@ -105,7 +105,7 @@ def doWADder(wad, titleid = "", title = "Channel by WADder", sound = "", dol = "
 			if(item[len(item) - 3:] == "app" or item[len(item) - 3:] == "bnr"):
 				shutil.copy(item, "bintemp/00000000.app")
 				wii.U8("bintemp/00000000.app").unpack()
-			elif(item[len(item) - 3:] == "bin")
+			elif(item[len(item) - 3:] == "bin"):
 				try:
 					os.mkdir("bintemp/00000000_app_out")
 				except:
