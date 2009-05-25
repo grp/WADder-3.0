@@ -14,6 +14,7 @@ def debug(text):
 def clean():
 	try:
 		shutil.rmtree("wadunpack")
+		shutil.rmtree("bintemp")
 		os.unlink("in.wad")
 		os.unlink("out.wad")
 		os.unlink("tmp.png")
@@ -51,7 +52,7 @@ def doApp(self): #we can ignore self
 	langs = []
 	langs.append(wadder.titletab.jap.GetValue())
 	langs.append(wadder.titletab.eng.GetValue())
-	langs.append(wadder.titletab.get.GetValue())
+	langs.append(wadder.titletab.ger.GetValue())
 	langs.append(wadder.titletab.fra.GetValue())
 	langs.append(wadder.titletab.spa.GetValue())
 	langs.append(wadder.titletab.ita.GetValue())
@@ -60,15 +61,62 @@ def doApp(self): #we can ignore self
 		if(len(langs[i]) > 20):
 			wx.MessageBox('Specific Language title must not be longer than 20 characters.', 'Error', wx.OK | wx.ICON_ERROR)
 			return
+			
+	exchange = []
+	exchange.append(wadder.extab.banner.GetValue())
+	exchange.append(wadder.extab.icon.GetValue())
+	exchange.append(wadder.extab.sound.GetValue())
+	for i in range(3):
+		if(os.path.exists(exchange[i]) != True and exchange[i] == ""):
+			wx.MessageBox('All selected exchange options must exist.', 'Error', wx.OK | wx.ICON_ERROR)
+			return
 	
-	doWADder(wad, titleid, title, sound, dol, nandloader, langs)
+	nandloader = wadder.opttab.nandloader.GetValue()
+	
+	doWADder(wad, titleid, title, sound, dol, nandloader, langs, exchange)
 
 	
-def doWADder(wad, titleid = "", title = "Channel by WADder", sound = "", dol = "", nandloader = "", langs = [], loop = 0):
+def doWADder(wad, titleid = "", title = "Channel by WADder", sound = "", dol = "", nandloader = "", langs = [], exchange = [], loop = 0):
 	shutil.copy(wad, "in.wad")
 	
 	wii.WAD("in.wad").unpack("wadunpack")
 	wii.U8(wii.IMET("wadunpack/00000000.app").remove()).unpack()
+	
+	for i, item in enumerate(exchange):
+		if(item == ""): #skip what doesn't get changed
+			continue
+		if(i == 0):
+			bin = "banner.bin"
+		elif(i == 1):
+			bin = "icon.bin"
+		else:
+			bin = "sound.bin"
+		
+		if(item[len(item) - 3:] == "wad"):
+			shutil.copy(item, "in.wad")
+			wii.WAD("in.wad").unpack("bintemp")
+			os.unlink("in.wad")
+			wii.U8("bintemp/00000000.app").unpack()
+		else:
+			try:
+				os.mkdir("bintemp")
+			except:
+				pass
+			if(item[len(item) - 3:] == "app" or item[len(item) - 3:] == "bnr"):
+				shutil.copy(item, "bintemp/00000000.app")
+				wii.U8("bintemp/00000000.app").unpack()
+			elif(item[len(item) - 3:] == "bin")
+				try:
+					os.mkdir("bintemp/00000000_app_out")
+				except:
+					pass
+				shutil.copy(item, "bintemp/00000000_app_out/meta/" + bin)
+			else:
+				continue #only bin, wad, bnr and app are supported
+		shutil.copy("bintemp/00000000_app_out/meta/" + bin, "wadunpack/00000000_app_out/meta/" + bin)
+		
+	
+
 	wii.U8(wii.LZ77(wii.IMD5("wadunpack/00000000_app_out/meta/banner.bin").remove()).remove()).unpack()
 	wii.U8(wii.LZ77(wii.IMD5("wadunpack/00000000_app_out/meta/icon.bin").remove()).remove()).unpack()
 	
@@ -88,7 +136,7 @@ def doWADder(wad, titleid = "", title = "Channel by WADder", sound = "", dol = "
 			os.mkdir("wadunpack")
 			shutil.copy("00000000.app", "wadunpack/00000000.app")
 			shutil.copytree("data/" + nandloader, "wadunpack")
-		if(nandloader == "Comex"):
+		if(nandloader == "comex"):
 			dolpath = "00000002.app"
 		else:
 			dolpath = "00000001.app"
@@ -217,8 +265,6 @@ class TitlePanel(wx.Panel):
 		self.fra = wx.TextCtrl(self, -1, "", (270, 80), (140, -1))
 		self.ita = wx.TextCtrl(self, -1, "", (270, 105), (140, -1))
 		self.dut = wx.TextCtrl(self, -1, "", (270, 130), (140, -1))
-		
-		pass
 		
 class OptPanel(wx.Panel):
 	def __init__(self, parent, id):
