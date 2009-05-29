@@ -683,7 +683,7 @@ class IMET():
 	
 	
 class LZ77():
-	class WiiLZ77:
+	class WiiLZ77: #class by marcan
 		TYPE_LZ77 = 1
 		def __init__(self, file, offset):
 			self.file = file
@@ -724,7 +724,6 @@ class LZ77():
 						break
 			self.data = dout
 			return self.data
-
 	def __init__(self, f):
 		self.f = f
 	def remove(self, fn = ""):
@@ -748,10 +747,10 @@ class LZ77():
 			return self.f
 	def add(self, fn = ""):
 		if(fn != ""):
-			#subprocess.call(["./gbalzss", self.f, fn, "-pack"])
+			subprocess.call(["./gbalzss", self.f, fn, "-pack"])
 			return fn
 		else:
-			#subprocess.call(["./gbalzss", self.f, self.f, "-pack"])
+			subprocess.call(["./gbalzss", self.f, self.f, "-pack"])
 			return self.f
 
 	
