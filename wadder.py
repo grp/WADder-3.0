@@ -2,24 +2,29 @@
 # WADder 3.0 pre-alpha
 #----------------------------------------------------------------------
 
-import os, wx, hashlib, shutil
+import os, wx, hashlib, shutil, sys
 from Struct import Struct
 import icewii as wii
 
 def debug(text):
 	if text != "":
-		print text #comment this out to not debug
+		#print text #comment this out to not debug
 		pass
 		
 def clean():
-	try:
-		shutil.rmtree("wadunpack")
-		shutil.rmtree("bintemp")
-		os.unlink("in.wad")
-		os.unlink("out.wad")
-		os.unlink("tmp.png")
-	except OSError:
-		pass
+	dirs = ["wadunpack", "bintemp"]
+	files = ["in.wad", "tmp.png", "out.wad"]
+	
+	for item in dirs:
+		try:
+			shutil.rmtree(item)
+		except OSError:
+			pass
+	for item in files:
+		try:
+			os.unlink(item)
+		except OSError:
+			pass
 		
 def doApp(self): #we can ignore self
 	global wadder
@@ -67,19 +72,25 @@ def doApp(self): #we can ignore self
 	exchange.append(wadder.extab.icon.GetValue())
 	exchange.append(wadder.extab.sound.GetValue())
 	for i in range(3):
-		if(os.path.exists(exchange[i]) != True and exchange[i] == ""):
+		if(os.path.exists(exchange[i]) != True and exchange[i] != ""):
 			wx.MessageBox('All selected exchange options must exist.', 'Error', wx.OK | wx.ICON_ERROR)
 			return
 	
 	nandloader = wadder.opttab.nandloader.GetValue()
 	
+	wx.Exit()
+	
 	doWADder(wad, titleid, title, sound, dol, nandloader, langs, exchange)
+	
+	sys.exit()
 
 	
-def doWADder(wad, titleid = "", title = "Channel by WADder", sound = "", dol = "", nandloader = "", langs = [], exchange = [], loop = 0):
+def doWADder(wad, titleid = "", title = "", sound = "", dol = "", nandloader = "", langs = [], exchange = [], loop = 0):
 	shutil.copy(wad, "in.wad")
 	
 	wii.WAD("in.wad").unpack("wadunpack")
+	if(title == ""):
+		title = wii.IMET("wadunpack/00000000.app").getTitle()
 	wii.U8(wii.IMET("wadunpack/00000000.app").remove()).unpack()
 	
 	for i, item in enumerate(exchange):
@@ -96,7 +107,7 @@ def doWADder(wad, titleid = "", title = "Channel by WADder", sound = "", dol = "
 			shutil.copy(item, "in.wad")
 			wii.WAD("in.wad").unpack("bintemp")
 			os.unlink("in.wad")
-			wii.U8("bintemp/00000000.app").unpack()
+			wii.U8(wii.IMET("bintemp/00000000.app").remove()).unpack()
 		else:
 			try:
 				os.mkdir("bintemp")
@@ -104,7 +115,7 @@ def doWADder(wad, titleid = "", title = "Channel by WADder", sound = "", dol = "
 				pass
 			if(item[len(item) - 3:] == "app" or item[len(item) - 3:] == "bnr"):
 				shutil.copy(item, "bintemp/00000000.app")
-				wii.U8("bintemp/00000000.app").unpack()
+				wii.U8(wii.IMET("bintemp/00000000.app").remove()).unpack()
 			elif(item[len(item) - 3:] == "bin"):
 				try:
 					os.mkdir("bintemp/00000000_app_out")
@@ -130,27 +141,26 @@ def doWADder(wad, titleid = "", title = "Channel by WADder", sound = "", dol = "
 	wii.IMET(wii.U8("wadunpack/00000000_app_out").pack()).add(os.path.getsize("wadunpack/00000000_app_out/meta/icon.bin"), os.path.getsize("wadunpack/00000000_app_out/meta/banner.bin"), os.path.getsize("wadunpack/00000000_app_out/meta/sound.bin"), title, langs)
 	
 	if(dol != ""):
-		if(nandloader != ""):
-			shutil.copy("wadunpack/00000000.app", "00000000.app")
-			shutil.rmtree("wadunpack")
-			os.mkdir("wadunpack")
-			shutil.copy("00000000.app", "wadunpack/00000000.app")
-			shutil.copytree("data/" + nandloader, "wadunpack")
+		shutil.copy("wadunpack/00000000.app", "00000000.app")
+		shutil.rmtree("wadunpack")
+		os.mkdir("wadunpack")
+		shutil.copytree("data/" + nandloader, "wadunpack")
+		
 		if(nandloader == "comex"):
 			dolpath = "00000002.app"
 		else:
 			dolpath = "00000001.app"
+		
 		shutil.copy(dol, "wadunpack/" + dolpath)
+		shutil.move("00000000.app", "wadunpack/0000000.app")
 
 	wii.WAD("wadunpack").pack("out.wad", titleid)
 	
-	dlg = wx.FileDialog(self, "Save completed WAD...", "", "", "Wii Channels (*.wad)|*.wad|All Files (*.*)|*.*", wx.SAVE)
+	dlg = wx.FileDialog(None, "Save completed WAD...", "", "", "Wii Channels (*.wad)|*.wad|All Files (*.*)|*.*", wx.SAVE)
 	if dlg.ShowModal() == wx.ID_OK:
 		shutil.move("out.wad", dlg.GetPath())
 	dlg.Destroy()
 	
-
-
 
 class ImagePanel(wx.Panel):
 	def __init__(self, parent, id, dir):
@@ -186,7 +196,7 @@ class ImagePanel(wx.Panel):
 
 
 class ImageUI(wx.Frame):
-    def __init__(self, parent, title):
+	def __init__(self, parent, title):
 		wx.Frame.__init__(self, parent, -1, title, (-1, -1), (300, 400))
 		panel = wx.Panel(self)
 		
@@ -194,8 +204,8 @@ class ImageUI(wx.Frame):
 		self.Bind(wx.EVT_BUTTON, self.close, self.gobtn)
 		
 		self.Show(True)
-    def close(self, evt):
-        self.Close()
+	def close(self, evt):
+		wx.Exit()
 
 
 class ImageEditor(wx.App):
@@ -274,7 +284,7 @@ class OptPanel(wx.Panel):
 		self.titleid = wx.TextCtrl(self, -1, "", (110, 10), (40, -1))
 		
 		wx.StaticText(self, -1, "NAND Loader:", (35, 75))
-		self.nandloader = wx.ComboBox(self, -1, "comex", (125, 73), style = wx.CB_READONLY | wx.CB_DROPDOWN, choices = ["comex", "Waninkoko"])
+		self.nandloader = wx.ComboBox(self, -1, "comex", (125, 73), style = wx.CB_READONLY | wx.CB_DROPDOWN, choices = ["comex", "waninkoko"])
 		
 		wx.StaticText(self, -1, "New DOL:", (5, 43))
 		dolbtn = wx.Button(self, -1, "Browse...", (340, 40), (80, -1))

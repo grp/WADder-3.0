@@ -134,8 +134,6 @@ class TPL(): #single texture only for now, do we need more?
 			tex.unpack(data[head.header_offset:head.header_offset + len(tex)])
 			w = tex.width
 			h = tex.height
-			
-			print(tex.format)
 		
 			if(tex.format == 0): #I4, 4-bit
 				tpldata = struct.unpack(">" + str((w * h) / 2) + "B", data[tex.data_off:tex.data_off + ((w * h) / 2)])
@@ -419,7 +417,6 @@ class U8():
 			self.size = Struct.uint32
 	def __init__(self, f):
 		self.f = f
-		print f
 	def _pack(self, file, recursion, is_root = 0): #internal
 		node = self.U8Node()
 		node.name_offset = len(self.strings)
@@ -489,7 +486,6 @@ class U8():
 				fn = os.path.dirname(self.f) + "/" + os.path.basename(self.f)[:len(os.path.basename(self.f)) - 4].replace("_", ".")
 			else:
 				fn = self.f
-		print fn
 			
 		f = open(fn, "wb")
 		f.write(header.pack())
@@ -579,10 +575,9 @@ class IMD5():
 			self.tag = Struct.string(4)
 			self.size = Struct.uint32
 			self.zeroes = Struct.uint8[8]
-			self.hash = Struct.string(16)
+			self.crypto = Struct.string(16)
 	def __init__(self, f):
 		self.f = f
-		print(f)
 	def add(self, fn = ""):
 		data = open(self.f, "rb").read()
 		
@@ -592,7 +587,7 @@ class IMD5():
 		imd5.tag = "IMD5"
 		imd5.size = len(data)
 		imd5.crypto = str(hashlib.md5(data).digest())
-		#data = imd5.pack() + data
+		data = imd5.pack() + data
 		
 		if(fn != ""):
 			open(fn, "wb").write(data)
@@ -628,12 +623,12 @@ class IMET():
 			self.unk = Struct.uint64
 			self.sizes = Struct.uint32[3] #icon, banner, sound
 			self.flag1 = Struct.uint32
-			self.names = Struct.string(0x2A << 1, encoding = 'utf-16-be', stripNulls = True)[7]
+			self.names = Struct.string(0x2A << 1, encoding = 'utf_16_be', stripNulls = True)[7]
 			self.zeroes2 = Struct.uint8[904]
 			self.crypto = Struct.string(16)
 	def __init__(self, f):
 		self.f = f
-	def add(self, iconsz, bannersz, soundsz, name = ">_>", fn = "", langs = []): #mode is add or remove
+	def add(self, iconsz, bannersz, soundsz, name = "", langs = [], fn = "",): #mode is add or remove
 		data = open(self.f, "rb").read()
 		imet = self.IMETHeader()
 		
@@ -652,7 +647,8 @@ class IMET():
 		for i in imet.zeroes2:
 			imet.zeroes2[i] = 0x00
 		imet.crypto = "\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00"
-		imet.crypto = str(hashlib.md5(imet.pack()[0x40:0x600]).digest())
+		tmp = imet.pack()
+		imet.crypto = str(hashlib.md5(tmp[0x40:0x600]).digest())
 		data = imet.pack() + data
 		
 		if(fn != ""):
@@ -680,6 +676,19 @@ class IMET():
 		else:
 			open(self.f, "wb").write(data)
 			return self.f
+	def getTitle(self):
+		imet = self.IMETHeader()
+		data = open(self.f, "rb").read()
+
+		if(data[0x40:0x44] == "IMET"):
+			pass
+		elif(data[0x80:0x84] == "IMET"):
+			data = data[0x40:]
+		else:
+			return ""
+
+		imet.unpack(data[:len(imet)])
+		return imet.names[1]
 	
 	
 class LZ77():
@@ -747,10 +756,8 @@ class LZ77():
 			return self.f
 	def add(self, fn = ""):
 		if(fn != ""):
-			subprocess.call(["./gbalzss", self.f, fn, "-pack"])
+			#subprocess.call(["./gbalzss", self.f, fn, "-pack"])
 			return fn
 		else:
-			subprocess.call(["./gbalzss", self.f, self.f, "-pack"])
+			#subprocess.call(["./gbalzss", self.f, self.f, "-pack"])
 			return self.f
-
-	
