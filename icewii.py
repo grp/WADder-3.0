@@ -2,6 +2,7 @@ import os, hashlib, struct, subprocess, fnmatch, shutil
 import wx
 import png
 from Struct import Struct
+from Crypto.Cipher import AES
 
 def be16(x):
 	return (x >> 8) | (x << 8)
@@ -12,7 +13,7 @@ def be32(x):
 def align(x, boundary):
 	return x + (x % boundary)
 
-class TPL(): #single texture only for now, do we need more?
+class TPL():
 	class TPLHeader(Struct):
 		__endian__ = Struct.BE
 		def __format__(self):
@@ -40,7 +41,7 @@ class TPL(): #single texture only for now, do we need more?
 			self.unpacked = Struct.uint8
 	def __init__(self, file):
 		self.file = file
-	def toTPL(self, outfile, width = 0, height = 0):
+	def toTPL(self, outfile, width = 0, height = 0): #single texture only
 		head = self.TPLHeader()
 		head.magic = 0x0020AF30
 		head.ntextures = 1
@@ -112,7 +113,7 @@ class TPL(): #single texture only for now, do we need more?
 						i += 1
 					z = 0
 		return out
-	def toPNG(self, outfile):
+	def toPNG(self, outfile): #single texture only
 		data = open(self.file).read()
 		
 		header = self.TPLHeader()
@@ -127,6 +128,9 @@ class TPL(): #single texture only for now, do we need more?
 			tmp.unpack(data[pos:pos + len(tmp)])
 			textures.append(tmp)
 			pos += len(tmp)
+		
+		if(header.ntextures > 1):
+			raise ValueError("Only one texture supported. Don't touch me!")
 		
 		for i in range(header.ntextures):
 			head = textures[i]
@@ -165,7 +169,30 @@ class TPL(): #single texture only for now, do we need more?
 		
 		output = png.Writer(width = w, height = h, alpha = True, bitdepth = 8)
 		output.write(open(outfile, "wb"), rgbdata)
-	def toScreen(self):		
+	def getSizes(self):
+		data = open(self.file).read()
+		
+		header = self.TPLHeader()
+		textures = []
+		pos = 0
+		
+		header.unpack(data[pos:pos + len(header)])
+		pos += len(header)
+		
+		for i in range(header.ntextures):
+			tmp = self.TPLTexture()
+			tmp.unpack(data[pos:pos + len(tmp)])
+			textures.append(tmp)
+			pos += len(tmp)
+		
+		for i in range(header.ntextures):
+			head = textures[i]
+			tex = self.TexHeader()
+			tex.unpack(data[head.header_offset:head.header_offset + len(tex)])
+			w = tex.width
+			h = tex.height
+		return (w, h)
+	def toScreen(self): #single texture only
 		class imp(wx.Panel):
 			def __init__(self, parent, id, im):
 				wx.Panel.__init__(self, parent, id)
@@ -359,7 +386,7 @@ class TPL(): #single texture only for now, do we need more?
 						out[y1][(x1 * 4) + 2] = b
 						out[y1][(x1 * 4) + 3] = a
 		return out
-		
+"""		
 class WAD():
 	def __init__(self, f):
 		self.f = f
@@ -398,7 +425,7 @@ class WAD():
 		os.unlink("common-key.bin")
 		os.chdir("..")
 		return self.f
-	
+	"""
 class U8():
 	class U8Header(Struct):
 		__endian__ = Struct.BE
@@ -761,3 +788,251 @@ class LZ77():
 		else:
 			#subprocess.call(["./gbalzss", self.f, self.f, "-pack"])
 			return self.f
+
+class Ticket:	
+	class TicketStruct(Struct):
+		__endian__ = Struct.BE
+		def __format__(self):
+			self.rsaexp = Struct.uint32
+			self.rsamod = Struct.string(256)
+			self.padding1 = Struct.string(60)
+			self.rsaid = Struct.string(64)
+			self.padding2 = Struct.string(63)
+			self.enctitlekey = Struct.string(16)
+			self.unk1 = Struct.uint8
+			self.tikid = Struct.uint64
+			self.console = Struct.uint32
+			self.titleid = Struct.uint64
+			self.unk2 = Struct.uint16
+			self.dlc = Struct.uint16
+			self.unk3 = Struct.uint64
+			self.commonkey_index = Struct.uint8
+			self.reserved = Struct.string(80)
+			self.unk3 = Struct.uint16
+			self.limits = Struct.string(64)
+	def __init__(self, f):
+		self.f = f
+		data = open(f, "rb").read()
+		self.tik = self.TicketStruct()
+		self.tik.unpack(data[:len(self.tik)])
+		
+		commonkey = "\xEB\xE4\x2A\x22\x5E\x85\x93\xE4\x48\xD9\xC5\x45\x73\x81\xAA\xF7"
+		iv = struct.pack(">Q", self.tik.titleid) + "\x00\x00\x00\x00\x00\x00\x00\x00"
+			
+		self.titlekey = AES.new(commonkey, AES.MODE_CBC, iv).decrypt(self.tik.enctitlekey)
+	def getTitleKey(self):
+		return self.titlekey
+	def getTitleID(self):
+		return self.tik.titleid
+	def setTitleID(self, titleid):
+		self.tik.titleid = titleid
+	def dump(self, fn = ""):
+		self.rsamod = self.rsamod = "\x00" * 256
+		for i in range(65536):
+			self.tik.unk2 = i
+			if(hashlib.sha1(self.tik.pack()).hexdigest()[:2] == "00"):
+				break
+			if(i == 65535):
+				raise ValueError("Failed to fakesign. Aborting...")
+			
+		if(fn == ""):
+			open(self.f, "wb").write(self.tik.pack())
+			return self.f
+		else:
+			open(fn, "wb").write(self.tik.pack())
+			return fn
+
+class TMD:
+	class TMDContent(Struct):
+		__endian__ = Struct.BE
+		def __format__(self):
+			self.cid = Struct.uint32
+			self.index = Struct.uint16
+			self.type = Struct.uint16
+			self.size = Struct.uint64
+			self.hash = Struct.string(20)
+	class TMDStruct(Struct):
+		__endian__ = Struct.BE
+		def __format__(self):
+			self.rsaexp = Struct.uint32
+			self.rsamod = Struct.string(256)
+			self.padding1 = Struct.string(60)
+			self.rsaid = Struct.string(64)
+			self.version = Struct.uint8[4]
+			self.iosversion = Struct.uint64
+			self.titleid = Struct.uint64
+			self.title_type = Struct.uint32
+			self.group_id = Struct.uint16
+			self.reserved = Struct.string(62)
+			self.access_rights = Struct.uint32
+			self.title_version = Struct.uint16
+			self.numcontents = Struct.uint16
+			self.boot_index = Struct.uint16
+			self.padding2 = Struct.uint16
+			#contents follow this
+			
+	def __init__(self, f):
+		self.f = f
+		
+		data = open(f, "rb").read()
+		self.tmd = self.TMDStruct()
+		self.tmd.unpack(data[:len(self.tmd)])
+		
+		self.contents = []
+		pos = len(self.tmd)
+		for i in range(self.tmd.numcontents):
+			cont = self.TMDContent()
+			cont.unpack(data[pos:pos + len(cont)])
+			pos += len(cont)
+			self.contents.append(cont)
+	def getContents(self):
+		return self.contents
+	def setContents(self, contents):
+		self.contents = contents
+		self.tmd.numcontents = len(contents)
+	def dump(self, fn = ""):
+		for i in range(65536):
+			self.tmd.padding2 = i
+			
+			data = ""
+			data += self.tmd.pack()
+			for i in range(self.tmd.numcontents):
+				data += self.contents[i].pack()
+			if(hashlib.sha1(data).hexdigest()[:2] == "00"):
+				break;
+			if(i == 65535):
+				raise ValueError("Failed to fakesign! Aborting...")
+	
+		data = ""
+		data += self.tmd.pack()
+		for i in range(self.tmd.numcontents):
+			data += self.contents[i].pack()
+			
+		if(fn == ""):
+			open(self.f, "wb").write(data)
+			return self.f
+		else:
+			open(fn, "wb").write(data)
+			return fn
+	def getTitleID(self):
+		return self.tmd.titleid
+	def setTitleID(self, titleid):
+		self.tmd.titleid = titleid
+	def getIOSVersion(self):
+		return self.tmd.iosversion
+	def setIOSVersion(self, version):
+		self.tmd.iosverison = version
+	def getBootIndex(self):
+		return self.tmd.boot_index
+	def setBootIndex(self, index):
+		self.tmd.boot_index = index
+
+
+
+class WAD:
+	def __init__(self, f):
+		self.f = f
+	def unpack(self, fn = ""):
+		fd = open(self.f, 'rb')
+		headersize, wadtype, certsize, reserved, tiksize, tmdsize, datasize, footersize = struct.unpack('>I4s6I', fd.read(32))
+		
+		try:
+			if(fn == ""):
+				fn = self.f.replace(".", "_") + "_out"
+			os.mkdir(fn)
+		except OSError:
+			pass
+		os.chdir(fn)
+		
+		fd.seek(32, 1)
+		rawcert = fd.read(certsize)
+		if(certsize % 64 != 0):
+			fd.seek(64 - (certsize % 64), 1)
+		open('cert', 'wb').write(rawcert)
+
+		rawtik = fd.read(tiksize)
+		if(tiksize % 64 != 0):
+			fd.seek(64 - (tiksize % 64), 1)
+		open('tik', 'wb').write(rawtik)
+				
+		rawtmd = fd.read(tmdsize)
+		if(tmdsize % 64 != 0):
+			fd.seek(64 - (tmdsize % 64), 1)
+		open('tmd', 'wb').write(rawtmd)
+		
+		titlekey = Ticket("tik").getTitleKey()
+		contents = TMD("tmd").getContents()
+		for i in range(0, len(contents)):
+			tmpsize = contents[i].size
+			if(tmpsize % 16 != 0):
+				tmpsize += 16 - (tmpsize % 16)
+			tmptmpdata = fd.read(tmpsize)
+			if len(tmptmpdata) % 16 != 0:
+				tmpdata = AES.new(titlekey, AES.MODE_CBC, struct.pack(">H", contents[i].index) + "\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00").decrypt(tmptmpdata + ("\x00" * (16 - (len(tmpsize) % 16))))[:len(tmpsize)]
+			else:
+				tmpdata = AES.new(titlekey, AES.MODE_CBC, struct.pack(">H", contents[i].index) + "\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00").decrypt(tmptmpdata)
+			
+			open("%08x.app" % contents[i].index, "wb").write(tmpdata)
+			if(tmpsize % 64 != 0):
+				fd.seek(64 - (tmpsize % 64), 1)
+		fd.close()
+		os.chdir('..')
+		
+		return fn
+
+	def pack(self, fn = "", titleid = ""):
+		os.chdir(self.f)
+		
+		tik = Ticket("tik")
+		tmd = TMD("tmd")
+		titlekey = tik.getTitleKey()
+		contents = tmd.getContents()
+		
+		apppack = ""
+		for i in range(len(contents)):
+			tmpdata = open("%08x.app" % i, "rb").read()
+			if len(tmpdata) % 16 != 0:
+				apppack += AES.new(titlekey, AES.MODE_CBC, contents[i].index).encrypt(tmpdata + ("\x00" * (16 - (len(tmpdata) % 16))))
+			else:
+				apppack += AES.new(titlekey, AES.MODE_CBC, struct.pack('>H', contents[i].index) + "\x00" * 14).encrypt(tmpdata)
+			if(len(tmpdata) % 64 != 0):
+				apppack += "\x00" * (64 - (len(tmpdata) % 64))
+			contents[i].hash = str(hashlib.sha1(tmpdata).digest())
+			
+		tmd.setContents(contents)
+		
+		if(titleid != ""): #FIX ME
+			tmd.setTitleID(((tmd.getTitleID() >> 32) << 32) | titleid)
+			tik.setTitleID(((tmd.getTitleID() >> 32) << 32) | titleid)
+		tmd.dump()
+		tik.dump()
+		
+		rawtmd = open("tmd", "rb").read()
+		cert = open('cert', 'rb').read()
+		rawtik = open("tik", "rb").read()
+		
+		sz = 0
+		for content in contents:
+			sz += content.size
+			if(sz % 64 != 0):
+				sz += 64 - (content.size % 64)
+		
+		pack = struct.pack('>I4s6I', 32, "Is\x00\x00", len(cert), 0, 676, 484 + (36 * len(tmd.getContents())), sz, 0) + "\x00" * 32
+		pack += cert
+		if(len(cert) % 64 != 0):
+			pack += "\x00" * (64 - (len(cert) % 64))
+		pack += rawtik + ("\x00" * 28)
+		pack += rawtmd
+		if(len(rawtmd) % 64 != 0):
+			pack += "\x00" * (64 - (len(rawtmd) % 64))
+		pack += apppack
+		
+		os.chdir('..')
+		if(fn == ""):
+			if(self.f[len(self.f) - 4:] == "_out"):
+				fn = os.path.dirname(self.f) + "/" + os.path.basename(self.f)[:len(os.path.basename(self.f)) - 4].replace("_", ".")
+			else:
+				fn = self.f
+		open(fn, "wb").write(pack)
+		return fn
+

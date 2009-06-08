@@ -8,10 +8,12 @@ import icewii as wii
 
 def debug(text):
 	if text != "":
-		#print text #comment this out to not debug
+		print text #comment this out to not debug
 		pass
 		
 def clean():
+	dirs = files = []
+
 	dirs = ["wadunpack", "bintemp"]
 	files = ["in.wad", "tmp.png", "out.wad"]
 	
@@ -78,16 +80,16 @@ def doApp(self): #we can ignore self
 	
 	nandloader = wadder.opttab.nandloader.GetValue()
 	
-	wx.Exit()
+	#wx.Exit()
 	
 	doWADder(wad, titleid, title, sound, dol, nandloader, langs, exchange)
 	
-	sys.exit()
+	#sys.exit()
 
 	
 def doWADder(wad, titleid = "", title = "", sound = "", dol = "", nandloader = "", langs = [], exchange = [], loop = 0):
 	shutil.copy(wad, "in.wad")
-	
+
 	wii.WAD("in.wad").unpack("wadunpack")
 	if(title == ""):
 		title = wii.IMET("wadunpack/00000000.app").getTitle()
@@ -182,8 +184,9 @@ class ImagePanel(wx.Panel):
 		self.Show(True)
 	def replacebutton(self, evt):
 		dlg = wx.FileDialog(self, "Choose a an image to replace...", "", "", "PNG images (*.png)|*.png|All Files (*.*)|*.*", wx.OPEN)
+		(width, height) = wii.TPL(self.dir + "/" + self.list.GetStringSelection()).getSizes()
 		if dlg.ShowModal() == wx.ID_OK:
-			wii.TPL(dlg.GetPath()).toTPL(self.dir + "/" + self.list.GetStringSelection())
+			wii.TPL(dlg.GetPath()).toTPL(self.dir + "/" + self.list.GetStringSelection(), width, height)
 		dlg.Destroy()
 	def viewbutton(self, evt):
 		wii.TPL(self.dir + "/" + self.list.GetStringSelection()).toScreen()
@@ -364,7 +367,7 @@ class WADder(wx.App):
 	def OnInit(self):
 		debug("Starting WADder 3.0 PREALPHA")
 		
-		frame = WADderUI(None, "WADder 3.0 by [ icefire ] PREALPHA")
+		frame = WADderUI(None, "WADder 3 by [ icefire ]")
         
 		nb = wx.Notebook(frame, -1, (5, 5), (430, 240))
 		
