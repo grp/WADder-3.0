@@ -1,13 +1,20 @@
 import os, hashlib, struct, subprocess, fnmatch, shutil, urllib
-import wx
+import wx#, Crypto
 import png
 from Struct import Struct
-from Crypto.Cipher import AES
 
 def align(x, boundary):
 	return x + (x % boundary)
 
 class TPL():
+	"""This is the class to generate TPL texutres from PNG images, and to convert TPL textures to PNG images. The parameter file specifies the filename of the source, either a PNG image or a TPL image.
+	
+	Currently supported are the following formats to convert from TPL: RGBA8, RGB565, RGB5A3, I4, I8, IA4, IA8. Currently not supported are: CI4, CI8, CMP.
+	
+	Currently support to convert to TPL: RGBA8. Currently not supported are: RGB565, RGB5A3, I4, I8, IA4, IA8, CI4, CI8, CMP.
+	
+	There are still some bugs in either the RGBA8 conversion to or from TPL. This causes stretched and distorted images with some files and images dimensions."""
+	
 	class TPLHeader(Struct):
 		__endian__ = Struct.BE
 		def __format__(self):
@@ -36,6 +43,9 @@ class TPL():
 	def __init__(self, file):
 		self.file = file
 	def toTPL(self, outfile, width = 0, height = 0): #single texture only
+		"""This converts a PNG image into a TPL. The PNG image is specified as the file parameter to the class initializer, while the output filename is specified here as the parameter outfile. Width and height are optional parameters and specify the size to resize the image to, if needed. Returns the output filename.
+		
+		This only can create TPL images with a single texture."""
 		head = self.TPLHeader()
 		head.magic = 0x0020AF30
 		head.ntextures = 1
@@ -73,7 +83,8 @@ class TPL():
 		f.write(struct.pack(">" + str(align(w, 4) * align(h, 4) * 4) + "B", *tpldata))
 		f.close()
 		
-		open("test.bin", "wb").write(struct.pack(str(align(w, 4) * align(h, 4) * 4) + "B", *tpldata)) #">" + 
+		return outfile
+		
 	def toRGBA8(self, (w, h), img, alpha):
 		out = [0 for i in range(align(w, 4) * align(h, 4) * 4)]
 		i = z = 0
@@ -108,6 +119,9 @@ class TPL():
 					z = 0
 		return out
 	def toPNG(self, outfile): #single texture only
+		"""This converts a TPL texture to a PNG image. You specify the input TPL filename in the initializer, and you specify the output filename in the outfile parameter to this method. Returns the output filename.
+		
+		This only supports single textured TPL images."""
 		data = open(self.file).read()
 		
 		header = self.TPLHeader()
@@ -163,7 +177,10 @@ class TPL():
 		
 		output = png.Writer(width = w, height = h, alpha = True, bitdepth = 8)
 		output.write(open(outfile, "wb"), rgbdata)
+		
+		return outfile
 	def getSizes(self):
+		"""This returns a tuple containing the width and height of the TPL image filename in the class initializer. Will only return the size of single textured TPL images."""
 		data = open(self.file).read()
 		
 		header = self.TPLHeader()
@@ -187,6 +204,9 @@ class TPL():
 			h = tex.height
 		return (w, h)
 	def toScreen(self): #single texture only
+		"""This will draw a simple window with the TPL image displayed on it. It uses WxPython for the window creation and management. The window has a minimum width and height of 300 x 200. Does not return a value.
+		
+		Again, only a single texture is supported."""
 		class imp(wx.Panel):
 			def __init__(self, parent, id, im):
 				wx.Panel.__init__(self, parent, id)
@@ -382,6 +402,9 @@ class TPL():
 		return out
 
 class U8():
+	"""This class can unpack and pack U8 archives, which are used all over the Wii. They are often used in Banners and contents in Downloadable Titles. Please remove all headers and compression first, kthx.
+	
+	The f parameter is either the source folder to pack, or the source file to unpack."""
 	class U8Header(Struct):
 		__endian__ = Struct.BE
 		def __format__(self):
@@ -440,6 +463,9 @@ class U8():
 				self.nodes.append(node)
 				
 	def pack(self, fn = ""):
+		"""This function will pack a folder into a U8 archive. The output file name is specified in the parameter fn. If fn is an empty string, the filename is deduced from the input folder name. Returns the output filename.
+		
+		This creates valid U8 archives for all purposes."""
 		header = self.U8Header()
 		self.rootnode = self.U8Node()
 		
@@ -481,6 +507,10 @@ class U8():
 		
 		return fn
 	def unpack(self, fn = ""):
+		"""This will unpack the U8 archive specified by the initialization parameter into either the folder specified by the parameter fn, or into a folder created with this formula:
+		``filename_extension_out``
+		
+		This will recreate the directory structure, including the initial root folder in the U8 archive (such as "arc" or "meta"). Returns the output directory name."""
 		data = open(self.f).read()
 		
 		offset = 0
@@ -551,6 +581,7 @@ class U8():
 
 		
 class IMD5():
+	"""This class can add and remove IMD5 headers to files. The parameter f is the file to use for the addition or removal of the header. IMD5 headers are found in banner.bin, icon.bin, and sound.bin."""
 	class IMD5Header(Struct):
 		__endian__ = Struct.BE
 		def __format__(self):
@@ -561,6 +592,7 @@ class IMD5():
 	def __init__(self, f):
 		self.f = f
 	def add(self, fn = ""):
+		"""This function adds an IMD5 header to the file specified by f in the initializer. The output file is specified with fn, if it is empty, it will overwrite the input file. If the file already has an IMD5 header, it will now have two. Returns the output filename."""
 		data = open(self.f, "rb").read()
 		
 		imd5 = self.IMD5Header()
@@ -578,6 +610,7 @@ class IMD5():
 			open(self.f, "wb").write(data)
 			return self.f
 	def remove(self, fn = ""):
+		"""This will remove an IMD5 header from the file specified in f, if one exists. If there is no IMD5 header, it will output the file as it is. It will output in the parameter fn if available, otherwise it will overwrite the source. Returns the output filename."""
 		data = open(self.f, "rb").read()
 		
 		if(data[:4] != "IMD5"):
@@ -596,6 +629,9 @@ class IMD5():
 			return self.f
 		
 class IMET():
+	"""IMET headers are found in Opening.bnr and 0000000.app files. They contain the channel titles and more metadata about channels. They are in two different formats with different amounts of padding before the start of the IMET header. This class suports both.
+	
+	The parameter f is used to specify the input file name."""
 	class IMETHeader(Struct):
 		__endian__ = Struct.BE
 		def __format__(self):
@@ -609,7 +645,8 @@ class IMET():
 			self.crypto = Struct.string(16)
 	def __init__(self, f):
 		self.f = f
-	def add(self, iconsz, bannersz, soundsz, name = "", langs = [], fn = "",):
+	def add(self, iconsz, bannersz, soundsz, name = "", langs = [], fn = ""):
+		"""This function adds an IMET header to the file specified with f in the initializer. The file will be output to fn if it is not empty, otherwise it will overwrite the input file. You must specify the size of banner.bin in bannersz, and respectivly for iconsz and soundsz. langs is an optional arguement that is a list of different langauge channel titles. name is the english name that is copied everywhere in langs that there is an empty string. Returns the output filename."""
 		data = open(self.f, "rb").read()
 		imet = self.IMETHeader()
 		
@@ -640,6 +677,7 @@ class IMET():
 			return self.f
 		
 	def remove(self, fn = ""):
+		"""This method removes an IMET header from a file specified with f in the initializer. fn is the output file name if it isn't an empty string, if it is, it will overwrite the input. If the input has no IMD5 header, it is output as is. Returns the output filename."""
 		data = open(self.f, "rb").read()
 		if(data[0x80:0x84] == "IMET"):
 			data = data[0x640:]
@@ -716,7 +754,8 @@ class LZ77():
 			return self.data
 	def __init__(self, f):
 		self.f = f
-	def remove(self, fn = ""):
+	def decompress(self, fn = ""):
+		"""This uncompresses a LZ77 compressed file, specified in f in the initializer. It outputs the file in either fn, if it isn't empty, or overwrites the input if it is. Returns the output filename."""
 		file = open(self.f, "rb")
  		hdr = file.read(4)
  		if hdr != "LZ77":
@@ -735,7 +774,8 @@ class LZ77():
 		else:
 			open(self.f, "wb").write(data)
 			return self.f
-	def add(self, fn = ""):
+	def compress(self, fn = ""):
+		"""This will eventually add LZ77 compression to a file. Does nothing for now."""
 		if(fn != ""):
 			#subprocess.call(["./gbalzss", self.f, fn, "-pack"])
 			return fn
@@ -744,6 +784,7 @@ class LZ77():
 			return self.f
 
 class Ticket:	
+	"""Creates a ticket from the filename defined in f. This may take a longer amount of time than expected, as it also decrypts the title key."""
 	class TicketStruct(Struct):
 		__endian__ = Struct.BE
 		def __format__(self):
@@ -773,14 +814,18 @@ class Ticket:
 		commonkey = "\xEB\xE4\x2A\x22\x5E\x85\x93\xE4\x48\xD9\xC5\x45\x73\x81\xAA\xF7"
 		iv = struct.pack(">Q", self.tik.titleid) + "\x00\x00\x00\x00\x00\x00\x00\x00"
 			
-		self.titlekey = AES.new(commonkey, AES.MODE_CBC, iv).decrypt(self.tik.enctitlekey)
+		self.titlekey = Crypto.AES.new(commonkey, AES.MODE_CBC, iv).decrypt(self.tik.enctitlekey)
 	def getTitleKey(self):
+		"""Returns a string containing the title key."""
 		return self.titlekey
 	def getTitleID(self):
+		"""Returns a long integer with the title id."""
 		return self.tik.titleid
 	def setTitleID(self, titleid):
+		"""Sets the title id of the ticket from the long integer passed in titleid."""
 		self.tik.titleid = titleid
 	def dump(self, fn = ""):
+		"""Fakesigns (or Trucha signs) and dumps the ticket to either fn, if not empty, or overwriting the source if empty. Returns the output filename."""
 		self.rsamod = self.rsamod = "\x00" * 256
 		for i in range(65536):
 			self.tik.unk2 = i
@@ -796,6 +841,7 @@ class Ticket:
 			open(fn, "wb").write(self.tik.pack())
 			return fn
 	def rawdump(self, fn = ""):
+		"""Dumps the ticket to either fn, if not empty, or overwriting the source if empty. **Does not fakesign.** Returns the output filename."""
 		if(fn == ""):
 			open(self.f, "wb").write(self.tik.pack())
 			return self.f
@@ -804,6 +850,7 @@ class Ticket:
 			return fn
 
 class TMD:
+	"""This class allows you to edit TMDs. TMD (Title Metadata) files are used in many places to hold information about titles. The parameter f to the initialization is the filename to open and create a TMD from."""
 	class TMDContent(Struct):
 		__endian__ = Struct.BE
 		def __format__(self):
@@ -847,11 +894,14 @@ class TMD:
 			pos += len(cont)
 			self.contents.append(cont)
 	def getContents(self):
+		"""Returns a list of contents. Each content is an object with the members "size", the size of the content's decrypted data; "cid", the content id; "type", the type of the content (0x8001 for shared, 0x0001 for standard, more possible), and a 20 byte string called "hash"."""
 		return self.contents
 	def setContents(self, contents):
+		"""This sets the contents in the TMD to the contents you provide in the contents parameter. Also updates the TMD to the appropraite amount of contents."""
 		self.contents = contents
 		self.tmd.numcontents = len(contents)
 	def dump(self, fn = ""):
+		"""Dumps the TMD to the filename specified in fn, if not empty. If that is empty, it overwrites the original. This fakesigns the TMD, but does not update the hashes and the sizes, that is left as a job for you. Returns output filename."""
 		for i in range(65536):
 			self.tmd.padding2 = i
 			
@@ -871,6 +921,7 @@ class TMD:
 			open(fn, "wb").write(data)
 			return fn
 	def rawdump(self, fn = ""):
+		"""Same as the :dump: function, but does not fakesign the TMD. Also returns output filename."""
 		data = ""
 		data += self.tmd.pack()
 		for i in range(self.tmd.numcontents):
@@ -883,24 +934,34 @@ class TMD:
 			open(fn, "wb").write(data)
 			return fn
 	def getTitleID(self):
+		"""Returns the long integer title id."""
 		return self.tmd.titleid
 	def setTitleID(self, titleid):
+		"""Sets the title id to the long integer specified in the parameter titleid."""
 		self.tmd.titleid = titleid
 	def getIOSVersion(self):
+		"""Returns the IOS version the title will run off of."""
 		return self.tmd.iosversion
 	def setIOSVersion(self, version):
+		"""Sets the IOS version the title will run off of to the arguement version."""
 		self.tmd.iosverison = version
 	def getBootIndex(self):
+		"""Returns the boot index of the TMD."""
 		return self.tmd.boot_index
 	def setBootIndex(self, index):
+		"""Sets the boot index of the TMD to the value of index."""
 		self.tmd.boot_index = index
 
 
 
 class WAD:
+	"""This class is to pack and unpack WAD files, which store a single title. You pass the input filename or input directory name to the parameter f.
+	
+	WAD packing support currently creates WAD files that return -4100 on install."""
 	def __init__(self, f):
 		self.f = f
 	def unpack(self, fn = ""):
+		"""Unpacks the WAD from the parameter f in the initializer to either the value of fn, if there is one, or a folder created with this formula: `filename_extension_out`. Certs are put in the file "cert", TMD in the file "tmd", ticket in the file "tik", and contents are put in the files based on index and with ".app" added to the end."""
 		fd = open(self.f, 'rb')
 		headersize, wadtype, certsize, reserved, tiksize, tmdsize, datasize, footersize = struct.unpack('>I4s6I', fd.read(32))
 		
@@ -936,9 +997,9 @@ class WAD:
 				tmpsize += 16 - (tmpsize % 16)
 			tmptmpdata = fd.read(tmpsize)
 			if len(tmptmpdata) % 16 != 0:
-				tmpdata = AES.new(titlekey, AES.MODE_CBC, struct.pack(">H", contents[i].index) + "\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00").decrypt(tmptmpdata + ("\x00" * (16 - (len(tmpsize) % 16))))[:len(tmpsize)]
+				tmpdata = Crypto.AES.new(titlekey, AES.MODE_CBC, struct.pack(">H", contents[i].index) + "\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00").decrypt(tmptmpdata + ("\x00" * (16 - (len(tmpsize) % 16))))[:len(tmpsize)]
 			else:
-				tmpdata = AES.new(titlekey, AES.MODE_CBC, struct.pack(">H", contents[i].index) + "\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00").decrypt(tmptmpdata)
+				tmpdata = Crypto.AES.new(titlekey, AES.MODE_CBC, struct.pack(">H", contents[i].index) + "\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00").decrypt(tmptmpdata)
 			
 			open("%08x.app" % contents[i].index, "wb").write(tmpdata)
 			if(tmpsize % 64 != 0):
@@ -949,13 +1010,14 @@ class WAD:
 		return fn
 
 	def pack(self, fn = "", titleid = "", fakesign = True, decrypted = True):
+		"""Packs a WAD into the filename specified by fn, if it is not empty. If it is empty, it packs into a filename generated from the folder's name. If fakesign is True, it will fakesign the Ticket and TMD, and update them as needed. If decrypted is true, it will assume the contents are already decrypted. For now, fakesign can not be True if encrypted is True. Title ID is a long integer of the destination title id."""
 		os.chdir(self.f)
 		
 		tik = Ticket("tik")
 		tmd = TMD("tmd")
-		if(titleid != "" and fakesign): #FIX ME, still?
-			tmd.setTitleID(((tmd.getTitleID() >> 32) << 32) | struct.pack("4s", titleid))
-			tik.setTitleID(((tmd.getTitleID() >> 32) << 32) | struct.pack("4s", titleid))
+		if(titleid != "" and fakesign):
+			tmd.setTitleID(titleid)
+			tik.setTitleID(titleid)
 		titlekey = tik.getTitleKey()
 		contents = tmd.getContents()
 		
@@ -970,9 +1032,9 @@ class WAD:
 			
 				iv = struct.pack('>H', contents[i].index) + "\x00" * 14
 				if(len(tmpdata) % 16 != 0):
-					encdata = AES.new(titlekey, AES.MODE_CBC, iv).encrypt(tmpdata + ("\x00" * (16 - (len(tmpdata) % 16))))
+					encdata = Crypto.AES.new(titlekey, AES.MODE_CBC, iv).encrypt(tmpdata + ("\x00" * (16 - (len(tmpdata) % 16))))
 				else:
-					encdata = AES.new(titlekey, AES.MODE_CBC, iv).encrypt(tmpdata)
+					encdata = Crypto.AES.new(titlekey, AES.MODE_CBC, iv).encrypt(tmpdata)
 			else:
 				encdata = tmpdata
 			
@@ -1020,11 +1082,13 @@ class WAD:
 		return fn
 
 class NUS:
-	def __init__(self, titleid, version = 0):
+	"""This class can download titles from NUS, or Nintendo Update Server. The titleid parameter is the long integer version of the title to download. The version parameter is optional and specifies the version to download. If version is not given, it is assumed to be the latest version on NUS."""
+	def __init__(self, titleid, version = None):
 		self.titleid = titleid
 		self.baseurl = "http://nus.cdn.shop.wii.com/ccs/download/%08x%08x/" % (titleid >> 32, titleid & 0xFFFFFFFF)
 		self.version = version
 	def download(self, fn = "", decrypt = True):
+		"""This will download a title from NUS into a directory either specified by fn (if it is not empty) or a directory created by the title id in hex form. If decrypt is true, it will decrypt the contents, otherwise it will not. A certs file is always created to enable easy WAD Packing."""
 		if(fn == ""):
 			fn = "%08x%08x" % (titleid >> 32, titleid & 0xFFFFFFFF)
 		try:
@@ -1047,7 +1111,7 @@ class NUS:
 		
 		open("cert", "wb").write(certs)
 		
-		if(self.version == 0):
+		if(self.version == None):
 			versionstring = ""
 		else:
 			versionstring = ".%u" % self.version
@@ -1070,9 +1134,9 @@ class NUS:
 				data = open("%08x.app" % content.index, "rb").read(content.size)
 				iv = struct.pack(">H", content.index) + "\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00"
 				if(len(data) % 16 != 0):
-					tmpdata = AES.new(titlekey, AES.MODE_CBC, iv).decrypt(data + ("\x00" * (16 - (len(data) % 16))))[:len(data)]
+					tmpdata = Crypto.AES.new(titlekey, AES.MODE_CBC, iv).decrypt(data + ("\x00" * (16 - (len(data) % 16))))[:len(data)]
 				else:
-					tmpdata = AES.new(titlekey, AES.MODE_CBC, iv).decrypt(data)
+					tmpdata = Crypto.AES.new(titlekey, AES.MODE_CBC, iv).decrypt(data)
 				if(hashlib.sha1(data).digest() != content.hash):
 					raise ValueError("Decryption failed! SHA1 mismatch.")
 				open("%08x.app" % content.index, "wb").write(tmpdata)
