@@ -1,5 +1,6 @@
 import os, hashlib, struct, subprocess, fnmatch, shutil, urllib
-import wx#, Crypto
+import wx
+from Crypto.Cipher import AES
 import png
 from Struct import Struct
 
@@ -612,7 +613,7 @@ class IMD5():
 	def remove(self, fn = ""):
 		"""This will remove an IMD5 header from the file specified in f, if one exists. If there is no IMD5 header, it will output the file as it is. It will output in the parameter fn if available, otherwise it will overwrite the source. Returns the output filename."""
 		data = open(self.f, "rb").read()
-		
+		imd5 = self.IMD5Header()
 		if(data[:4] != "IMD5"):
 				if(fn != ""):
 					open(fn, "wb").write(data)
@@ -814,7 +815,7 @@ class Ticket:
 		commonkey = "\xEB\xE4\x2A\x22\x5E\x85\x93\xE4\x48\xD9\xC5\x45\x73\x81\xAA\xF7"
 		iv = struct.pack(">Q", self.tik.titleid) + "\x00\x00\x00\x00\x00\x00\x00\x00"
 			
-		self.titlekey = Crypto.AES.new(commonkey, AES.MODE_CBC, iv).decrypt(self.tik.enctitlekey)
+		self.titlekey = AES.new(commonkey, AES.MODE_CBC, iv).decrypt(self.tik.enctitlekey)
 	def getTitleKey(self):
 		"""Returns a string containing the title key."""
 		return self.titlekey
@@ -997,9 +998,9 @@ class WAD:
 				tmpsize += 16 - (tmpsize % 16)
 			tmptmpdata = fd.read(tmpsize)
 			if len(tmptmpdata) % 16 != 0:
-				tmpdata = Crypto.AES.new(titlekey, AES.MODE_CBC, struct.pack(">H", contents[i].index) + "\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00").decrypt(tmptmpdata + ("\x00" * (16 - (len(tmpsize) % 16))))[:len(tmpsize)]
+				tmpdata = AES.new(titlekey, AES.MODE_CBC, struct.pack(">H", contents[i].index) + "\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00").decrypt(tmptmpdata + ("\x00" * (16 - (len(tmpsize) % 16))))[:len(tmpsize)]
 			else:
-				tmpdata = Crypto.AES.new(titlekey, AES.MODE_CBC, struct.pack(">H", contents[i].index) + "\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00").decrypt(tmptmpdata)
+				tmpdata = AES.new(titlekey, AES.MODE_CBC, struct.pack(">H", contents[i].index) + "\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00").decrypt(tmptmpdata)
 			
 			open("%08x.app" % contents[i].index, "wb").write(tmpdata)
 			if(tmpsize % 64 != 0):
@@ -1032,9 +1033,9 @@ class WAD:
 			
 				iv = struct.pack('>H', contents[i].index) + "\x00" * 14
 				if(len(tmpdata) % 16 != 0):
-					encdata = Crypto.AES.new(titlekey, AES.MODE_CBC, iv).encrypt(tmpdata + ("\x00" * (16 - (len(tmpdata) % 16))))
+					encdata = AES.new(titlekey, AES.MODE_CBC, iv).encrypt(tmpdata + ("\x00" * (16 - (len(tmpdata) % 16))))
 				else:
-					encdata = Crypto.AES.new(titlekey, AES.MODE_CBC, iv).encrypt(tmpdata)
+					encdata = AES.new(titlekey, AES.MODE_CBC, iv).encrypt(tmpdata)
 			else:
 				encdata = tmpdata
 			
@@ -1134,9 +1135,9 @@ class NUS:
 				data = open("%08x.app" % content.index, "rb").read(content.size)
 				iv = struct.pack(">H", content.index) + "\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00"
 				if(len(data) % 16 != 0):
-					tmpdata = Crypto.AES.new(titlekey, AES.MODE_CBC, iv).decrypt(data + ("\x00" * (16 - (len(data) % 16))))[:len(data)]
+					tmpdata = AES.new(titlekey, AES.MODE_CBC, iv).decrypt(data + ("\x00" * (16 - (len(data) % 16))))[:len(data)]
 				else:
-					tmpdata = Crypto.AES.new(titlekey, AES.MODE_CBC, iv).decrypt(data)
+					tmpdata = AES.new(titlekey, AES.MODE_CBC, iv).decrypt(data)
 				if(hashlib.sha1(data).digest() != content.hash):
 					raise ValueError("Decryption failed! SHA1 mismatch.")
 				open("%08x.app" % content.index, "wb").write(tmpdata)
