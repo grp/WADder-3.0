@@ -616,7 +616,7 @@ class IMD5():
 		imd5 = self.IMD5Header()
 		if(data[:4] != "IMD5"):
 				if(fn != ""):
-					open(fn, "wb").write(data)
+					open(fn, "wb").write(data) 
 					return fn
 				else:
 					return self.f
