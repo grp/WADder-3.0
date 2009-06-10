@@ -130,16 +130,16 @@ def doWADder(wad, titleid = "", title = "", sound = "", dol = "", nandloader = "
 		
 	
 
-	wii.U8(wii.LZ77(wii.IMD5("wadunpack/00000000_app_out/meta/banner.bin").remove()).remove()).unpack()
-	wii.U8(wii.LZ77(wii.IMD5("wadunpack/00000000_app_out/meta/icon.bin").remove()).remove()).unpack()
+	wii.U8(wii.LZ77(wii.IMD5("wadunpack/00000000_app_out/meta/banner.bin").remove()).decompress()).unpack()
+	wii.U8(wii.LZ77(wii.IMD5("wadunpack/00000000_app_out/meta/icon.bin").remove()).decompress()).unpack()
 	
 	#do sound stuff, dis is teh hard partz
 		
 	imedit = ImageEditor(redirect=True)
 	imedit.MainLoop()
 
-	wii.IMD5(wii.LZ77(wii.U8("wadunpack/00000000_app_out/meta/banner_bin_out").pack()).add()).add()
-	wii.IMD5(wii.LZ77(wii.U8("wadunpack/00000000_app_out/meta/icon_bin_out").pack()).add()).add()
+	wii.IMD5(wii.LZ77(wii.U8("wadunpack/00000000_app_out/meta/banner_bin_out").pack()).compress()).add()
+	wii.IMD5(wii.LZ77(wii.U8("wadunpack/00000000_app_out/meta/icon_bin_out").pack()).compress()).add()
 	wii.IMET(wii.U8("wadunpack/00000000_app_out").pack()).add(os.path.getsize("wadunpack/00000000_app_out/meta/icon.bin"), os.path.getsize("wadunpack/00000000_app_out/meta/banner.bin"), os.path.getsize("wadunpack/00000000_app_out/meta/sound.bin"), title, langs)
 	
 	if(dol != ""):
@@ -385,9 +385,10 @@ class WADder(wx.App):
 		
 		return True
 
-clean()
-wadder = WADder(redirect=True)
-wadder.MainLoop()
+if(__name__ == '__main__'):
+	clean()
+	wadder = WADder(redirect=True)
+	wadder.MainLoop()
 
 
 
