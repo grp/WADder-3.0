@@ -768,7 +768,6 @@ class Ticket:
 		self.f = f
 		data = open(f, "rb").read()
 		self.tik = self.TicketStruct()
-		print len(self.tik)
 		self.tik.unpack(data[:len(self.tik)])
 		
 		commonkey = "\xEB\xE4\x2A\x22\x5E\x85\x93\xE4\x48\xD9\xC5\x45\x73\x81\xAA\xF7"

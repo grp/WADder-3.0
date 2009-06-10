@@ -10,7 +10,7 @@ icewii.py checklist
 [ ] LZ77 compression and decompression
 [ ] ASH compression and decompression
 [ ] yaz0 compression and decompression
-[ ] NUS downloading
+[+] NUS downloading
 [ ] banner API
 [ ] WiiDisk packing/unpacking
 [ ] Savefile packing/unpacking
