@@ -763,11 +763,12 @@ class Ticket:
 			self.commonkey_index = Struct.uint8
 			self.reserved = Struct.string(80)
 			self.unk3 = Struct.uint16
-			self.limits = Struct.string(64)
+			self.limits = Struct.string(96)
 	def __init__(self, f):
 		self.f = f
 		data = open(f, "rb").read()
 		self.tik = self.TicketStruct()
+		print len(self.tik)
 		self.tik.unpack(data[:len(self.tik)])
 		
 		commonkey = "\xEB\xE4\x2A\x22\x5E\x85\x93\xE4\x48\xD9\xC5\x45\x73\x81\xAA\xF7"
@@ -964,8 +965,9 @@ class WAD:
 			tmpdata = open("%08x.app" % i, "rb").read()
 			
 			if(decrypted):
-				contents[i].hash = str(hashlib.sha1(tmpdata).digest())
-				contents[i].size = len(tmpdata)
+				if(fakesign):
+					contents[i].hash = str(hashlib.sha1(tmpdata).digest())
+					contents[i].size = len(tmpdata)
 			
 				iv = struct.pack('>H', contents[i].index) + "\x00" * 14
 				if(len(tmpdata) % 16 != 0):
