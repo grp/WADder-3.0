@@ -1010,7 +1010,7 @@ class WAD:
 		return fn
 
 	def pack(self, fn = "", titleid = "", fakesign = True, decrypted = True):
-		"""Packs a WAD into the filename specified by fn, if it is not empty. If it is empty, it packs into a filename generated from the folder's name. If fakesign is True, it will fakesign the Ticket and TMD, and update them as needed. If decrypted is true, it will assume the contents are already decrypted. For now, fakesign can not be True if encrypted is True. Title ID is a long integer of the destination title id."""
+		"""Packs a WAD into the filename specified by fn, if it is not empty. If it is empty, it packs into a filename generated from the folder's name. If fakesign is True, it will fakesign the Ticket and TMD, and update them as needed. If decrypted is true, it will assume the contents are already decrypted. For now, fakesign can not be True if decrypted is False, however fakesign can be False if decrypted is True. Title ID is a long integer of the destination title id."""
 		os.chdir(self.f)
 		
 		tik = Ticket("tik")
