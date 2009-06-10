@@ -1,0 +1,23 @@
+icewii.py checklist
+
+[+] U8 packing/unpacking
+[+] WAD packing/unpacking
+[+] IMET and IMD5 headers
+[+] TPL to PNG (mostly, CI* or CMP)
+[+] PNG to TPL (one format so far, RGBA8)
+[+] TMD editing (manual and w/ methods)
+[+] Ticket editing (manual and w/ methods)
+[ ] LZ77 compression and decompression
+[ ] ASH compression and decompression
+[ ] yaz0 compression and decompression
+[ ] NUS downloading
+[ ] banner API
+[ ] WiiDisk packing/unpacking
+[ ] Savefile packing/unpacking
+[ ] content.bin packing/unpacking
+
+eventually it would be nice to have:
+[ ] boot2 WAD packer
+[ ] banner player
+[ ] internal banner code
+[ ] CHANS parser/compiler

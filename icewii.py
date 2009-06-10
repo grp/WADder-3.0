@@ -1,14 +1,8 @@
-import os, hashlib, struct, subprocess, fnmatch, shutil
+import os, hashlib, struct, subprocess, fnmatch, shutil, urllib
 import wx
 import png
 from Struct import Struct
 from Crypto.Cipher import AES
-
-def be16(x):
-	return (x >> 8) | (x << 8)
- 
-def be32(x):
-	return (x>>24) | ((x<<8) & 0x00FF0000) | ((x>>8) & 0x0000FF00) | (x<<24)
 
 def align(x, boundary):
 	return x + (x % boundary)
@@ -25,7 +19,7 @@ class TPL():
 		def __format__(self):
 			self.header_offset = Struct.uint32
 			self.pallete_offset = Struct.uint32
-	class TexHeader(Struct):
+	class TPLTextureHeader(Struct):
 		__endian__ = Struct.BE
 		def __format__(self):
 			self.height = Struct.uint16
@@ -57,7 +51,7 @@ class TPL():
 		w = img.GetWidth()
 		h = img.GetHeight()
 		
-		texhead = self.TexHeader()
+		texhead = self.TPLTextureHeader()
 		texhead.height = h
 		texhead.width = w
 		texhead.format = 6
@@ -134,7 +128,7 @@ class TPL():
 		
 		for i in range(header.ntextures):
 			head = textures[i]
-			tex = self.TexHeader()
+			tex = self.TPLTextureHeader()
 			tex.unpack(data[head.header_offset:head.header_offset + len(tex)])
 			w = tex.width
 			h = tex.height
@@ -187,7 +181,7 @@ class TPL():
 		
 		for i in range(header.ntextures):
 			head = textures[i]
-			tex = self.TexHeader()
+			tex = self.TPLTextureHeader()
 			tex.unpack(data[head.header_offset:head.header_offset + len(tex)])
 			w = tex.width
 			h = tex.height
@@ -386,46 +380,7 @@ class TPL():
 						out[y1][(x1 * 4) + 2] = b
 						out[y1][(x1 * 4) + 3] = a
 		return out
-"""		
-class WAD():
-	def __init__(self, f):
-		self.f = f
-	def unpack(self, fn = ""):
-		if(fn != ""):
-			subprocess.call(["./wadunpacker", self.f, fn])
-			return fn
-		else:
-			subprocess.call(["./wadunpacker", self.f, os.dirname(self.f) + os.basename(self.f).replace(".", "_") + "_out"])
-			return self.f
-	def pack(self, fn = "", titleid = ""):
-		os.chdir(self.f)	
-		for fname in os.listdir("."):
-			if fnmatch.fnmatch(fname, '*.tik'):
-   				tik = fname
-			if fnmatch.fnmatch(fname, '*.tmd'):
-   				tmd = fname
-			if fnmatch.fnmatch(fname, '*.cert'):
-   				cert = fname
-   		shutil.copy("../common-key.bin", "common-key.bin")
-		if(fn != ""):
-			if(titleid == ""):
-				subprocess.call(["../wadpacker", tik, tmd, cert, "../" + fn, "-sign"])
-			else:
-				subprocess.call(["../wadpacker", tik, tmd, cert, "../" + fn, "-sign", "-i", titleid])
-		else:
-			if(self.f[len(self.f):4] == "_out"):
-				outfile = os.dirname(self.f) + os.basename(self.f).replace("_", ".")[len(os.basename(self.f)) - 4:]
-			else:
-				outfile = self.f + ".wad"
 
-			if(titleid == ""):
-				subprocess.call(["../wadpacker", tik, tmd, cert, "../" + outfile, "-sign"])
-			else:
-				subprocess.call(["../wadpacker", tik, tmd, cert, "../" + outfile, "-sign", "-i", titleid])
-		os.unlink("common-key.bin")
-		os.chdir("..")
-		return self.f
-	"""
 class U8():
 	class U8Header(Struct):
 		__endian__ = Struct.BE
@@ -531,7 +486,7 @@ class U8():
 		offset = 0
 		
 		header = self.U8Header()
-		header.unpack(data[offset:len(header)])
+		header.unpack(data[offset:offset + len(header)])
 		offset += len(header)
 		
 		if(header.tag != "U\xAA8-"):
@@ -624,7 +579,6 @@ class IMD5():
 			return self.f
 	def remove(self, fn = ""):
 		data = open(self.f, "rb").read()
-		imd5 = self.IMD5Header()
 		
 		if(data[:4] != "IMD5"):
 				if(fn != ""):
@@ -655,7 +609,7 @@ class IMET():
 			self.crypto = Struct.string(16)
 	def __init__(self, f):
 		self.f = f
-	def add(self, iconsz, bannersz, soundsz, name = "", langs = [], fn = "",): #mode is add or remove
+	def add(self, iconsz, bannersz, soundsz, name = "", langs = [], fn = "",):
 		data = open(self.f, "rb").read()
 		imet = self.IMETHeader()
 		
@@ -841,6 +795,13 @@ class Ticket:
 		else:
 			open(fn, "wb").write(self.tik.pack())
 			return fn
+	def rawdump(self, fn = ""):
+		if(fn == ""):
+			open(self.f, "wb").write(self.tik.pack())
+			return self.f
+		else:
+			open(fn, "wb").write(self.tik.pack())
+			return fn
 
 class TMD:
 	class TMDContent(Struct):
@@ -894,20 +855,27 @@ class TMD:
 		for i in range(65536):
 			self.tmd.padding2 = i
 			
-			data = ""
+			data = "" #gotta reset it every time
 			data += self.tmd.pack()
 			for i in range(self.tmd.numcontents):
 				data += self.contents[i].pack()
 			if(hashlib.sha1(data).hexdigest()[:2] == "00"):
-				break;
+				break
 			if(i == 65535):
 				raise ValueError("Failed to fakesign! Aborting...")
-	
+			
+		if(fn == ""):
+			open(self.f, "wb").write(data)
+			return self.f
+		else:
+			open(fn, "wb").write(data)
+			return fn
+	def rawdump(self, fn = ""):
 		data = ""
 		data += self.tmd.pack()
 		for i in range(self.tmd.numcontents):
 			data += self.contents[i].pack()
-			
+					
 		if(fn == ""):
 			open(self.f, "wb").write(data)
 			return self.f
@@ -980,51 +948,65 @@ class WAD:
 		
 		return fn
 
-	def pack(self, fn = "", titleid = ""):
+	def pack(self, fn = "", titleid = "", fakesign = True, decrypted = True):
 		os.chdir(self.f)
 		
 		tik = Ticket("tik")
 		tmd = TMD("tmd")
+		if(titleid != "" and fakesign): #FIX ME, still?
+			tmd.setTitleID(((tmd.getTitleID() >> 32) << 32) | struct.pack("4s", titleid))
+			tik.setTitleID(((tmd.getTitleID() >> 32) << 32) | struct.pack("4s", titleid))
 		titlekey = tik.getTitleKey()
 		contents = tmd.getContents()
 		
 		apppack = ""
 		for i in range(len(contents)):
 			tmpdata = open("%08x.app" % i, "rb").read()
-			if len(tmpdata) % 16 != 0:
-				apppack += AES.new(titlekey, AES.MODE_CBC, contents[i].index).encrypt(tmpdata + ("\x00" * (16 - (len(tmpdata) % 16))))
-			else:
-				apppack += AES.new(titlekey, AES.MODE_CBC, struct.pack('>H', contents[i].index) + "\x00" * 14).encrypt(tmpdata)
-			if(len(tmpdata) % 64 != 0):
-				apppack += "\x00" * (64 - (len(tmpdata) % 64))
-			contents[i].hash = str(hashlib.sha1(tmpdata).digest())
 			
-		tmd.setContents(contents)
-		
-		if(titleid != ""): #FIX ME
-			tmd.setTitleID(((tmd.getTitleID() >> 32) << 32) | titleid)
-			tik.setTitleID(((tmd.getTitleID() >> 32) << 32) | titleid)
-		tmd.dump()
-		tik.dump()
+			if(decrypted):
+				contents[i].hash = str(hashlib.sha1(tmpdata).digest())
+				contents[i].size = len(tmpdata)
+			
+				iv = struct.pack('>H', contents[i].index) + "\x00" * 14
+				if(len(tmpdata) % 16 != 0):
+					encdata = AES.new(titlekey, AES.MODE_CBC, iv).encrypt(tmpdata + ("\x00" * (16 - (len(tmpdata) % 16))))
+				else:
+					encdata = AES.new(titlekey, AES.MODE_CBC, iv).encrypt(tmpdata)
+			else:
+				encdata = tmpdata
+			
+			apppack += encdata
+			if(len(encdata) % 64 != 0):
+				apppack += "\x00" * (64 - (len(encdata) % 64))
+					
+		if(fakesign):
+			tmd.setContents(contents)
+			tmd.dump()
+			tik.dump()
 		
 		rawtmd = open("tmd", "rb").read()
-		cert = open('cert', 'rb').read()
+		rawcert = open('cert', 'rb').read()
 		rawtik = open("tik", "rb").read()
 		
 		sz = 0
-		for content in contents:
-			sz += content.size
+		for i in range(len(contents)):
+			sz += contents[i].size
 			if(sz % 64 != 0):
-				sz += 64 - (content.size % 64)
+				sz += 64 - (contents[i].size % 64)
 		
-		pack = struct.pack('>I4s6I', 32, "Is\x00\x00", len(cert), 0, 676, 484 + (36 * len(tmd.getContents())), sz, 0) + "\x00" * 32
-		pack += cert
-		if(len(cert) % 64 != 0):
-			pack += "\x00" * (64 - (len(cert) % 64))
-		pack += rawtik + ("\x00" * 28)
+		pack = struct.pack('>I4s6I', 32, "Is\x00\x00", len(rawcert), 0, len(rawtik), len(rawtmd), sz, 0)
+		pack += "\x00" * 32
+		
+		pack += rawcert
+		if(len(rawcert) % 64 != 0):
+			pack += "\x00" * (64 - (len(rawcert) % 64))
+		pack += rawtik
+		if(len(rawtik) % 64 != 0):
+			pack += "\x00" * (64 - (len(rawtik) % 64))
 		pack += rawtmd
 		if(len(rawtmd) % 64 != 0):
 			pack += "\x00" * (64 - (len(rawtmd) % 64))
+		
 		pack += apppack
 		
 		os.chdir('..')
@@ -1036,3 +1018,64 @@ class WAD:
 		open(fn, "wb").write(pack)
 		return fn
 
+class NUS:
+	def __init__(self, titleid, version = 0):
+		self.titleid = titleid
+		self.baseurl = "http://nus.cdn.shop.wii.com/ccs/download/%08x%08x/" % (titleid >> 32, titleid & 0xFFFFFFFF)
+		self.version = version
+	def download(self, fn = "", decrypt = True):
+		if(fn == ""):
+			fn = "%08x%08x" % (titleid >> 32, titleid & 0xFFFFFFFF)
+		try:
+			os.mkdir(fn)
+		except:
+			pass
+		os.chdir(fn)
+		
+		certs = ""
+		rawtmd = urllib.urlopen("http://nus.cdn.shop.wii.com/ccs/download/0000000100000002/tmd.289").read()
+		rawtik = urllib.urlopen("http://nus.cdn.shop.wii.com/ccs/download/0000000100000002/cetk").read()
+		
+		certs += rawtik[0x2A4:0x2A4 + 0x300] #XS
+		certs += rawtik[0x2A4 + 0x300:] #CA (tik)
+		#certs += rawtmd[0x628:0x628 + 0x400] #CA (tmd)
+		certs += rawtmd[0x328:0x328 + 0x300] #CP
+
+		if(hashlib.md5(certs).hexdigest() != "7ff50e2733f7a6be1677b6f6c9b625dd"):
+			raise ValueError("Failed to create certs! MD5 mistatch.")
+		
+		open("cert", "wb").write(certs)
+		
+		if(self.version == 0):
+			versionstring = ""
+		else:
+			versionstring = ".%u" % self.version
+		
+		urllib.urlretrieve(self.baseurl + "tmd" + versionstring, "tmd")
+		tmd = TMD("tmd")
+		tmd.rawdump("tmd") #this is to strip off the certs, and this won't fakesign so it should work
+		
+		urllib.urlretrieve(self.baseurl + "cetk", "tik")
+		tik = Ticket("tik")
+		tik.rawdump("tik") #this is to strip off the certs, and this won't fakesign so it should work
+		if(decrypt):
+			titlekey = tik.getTitleKey()
+		
+		contents = tmd.getContents()
+		for content in contents:
+			urllib.urlretrieve(self.baseurl + ("%08x" % content.cid), "%08x.app" % content.index)
+			
+			if(decrypt):
+				data = open("%08x.app" % content.index, "rb").read(content.size)
+				iv = struct.pack(">H", content.index) + "\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00"
+				if(len(data) % 16 != 0):
+					tmpdata = AES.new(titlekey, AES.MODE_CBC, iv).decrypt(data + ("\x00" * (16 - (len(data) % 16))))[:len(data)]
+				else:
+					tmpdata = AES.new(titlekey, AES.MODE_CBC, iv).decrypt(data)
+				if(hashlib.sha1(data).digest() != content.hash):
+					raise ValueError("Decryption failed! SHA1 mismatch.")
+				open("%08x.app" % content.index, "wb").write(tmpdata)
+				
+		os.chdir("..")
+		
+		

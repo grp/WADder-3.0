@@ -14,8 +14,8 @@ def debug(text):
 def clean():
 	dirs = files = []
 
-	dirs = ["wadunpack", "bintemp"]
-	files = ["in.wad", "tmp.png", "out.wad"]
+	#dirs = ["wadunpack", "bintemp"]
+	#files = ["in.wad", "tmp.png", "out.wad"]
 	
 	for item in dirs:
 		try:
