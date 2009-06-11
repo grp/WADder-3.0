@@ -850,6 +850,80 @@ class Ticket:
 			open(fn, "wb").write(self.tik.pack())
 			return fn
 
+class NAND:
+	"""This class performs all NAND related things. It includes functions to copy a title (given the TMD) into the correct structure as the Wii does, and will eventually have an entire ES-like system. Parameter f to the initializer is the folder that will be used as the NAND root."""
+	def __init__(self, f):
+		self.f = f
+		if(not os.path.isdir(f)):
+			os.mkdir(f)
+		if(not os.path.isdir(f + "/import")):
+			os.mkdir(f + "/import")
+		if(not os.path.isdir(f + "/meta")):
+			os.mkdir(f + "/meta")
+		if(not os.path.isdir(f + "/shared1")):
+			os.mkdir(f + "/shared1")
+		if(not os.path.isfile(f + "/shared1/content.map")):
+			open(f + "/shared1/content.map", "wb").close()
+		if(not os.path.isdir(f + "/shared2")):
+			os.mkdir(f + "/shared2")
+		if(not os.path.isdir(f + "/sys")):
+			os.mkdir(f + "/sys")
+		if(not os.path.isfile(f + "/sys/cc.sys")):
+			open(f + "/sys/cc.sys", "wb").close()
+		if(not os.path.isfile(f + "/sys/cert.sys")):
+			open(f + "/sys/cert.sys", "wb").close()
+		if(not os.path.isfile(f + "/sys/space.sys")):
+			open(f + "/sys/space.sys", "wb").close()
+		if(not os.path.isfile(f + "/sys/uid.sys")):
+			open(f + "/sys/uid.sys", "wb").close()
+		if(not os.path.isdir(f + "/ticket")):
+			os.mkdir(f + "/ticket")
+		if(not os.path.isdir(f + "/title")):
+			os.mkdir(f + "/title")
+		if(not os.path.isdir(f + "/tmp")):
+			os.mkdir(f + "/tmp")
+	def importFromTMDTik(self, tmd, tik):
+		contents = tmd.getContents()
+		for i in range(tmd.tmd.numcontents):
+			fp = open("%08x.app" % contents[i].cid, "rb")
+			if(contents[i].type == 0x0001):
+				if(not os.path.isdir(self.f + "/title/%08x" % (tmd.tmd.titleid >> 32))):
+					os.mkdir(self.f + "/title/%08x" % (tmd.tmd.titleid >> 32))
+				if(not os.path.isdir(self.f + "/title/%08x/%08x" % (tmd.tmd.titleid >> 32, tmd.tmd.titleid & 0xFFFFFFFF))):
+					os.mkdir(self.f + "/title/%08x/%08x" % (tmd.tmd.titleid >> 32, tmd.tmd.titleid & 0xFFFFFFFF))
+				if(not os.path.isdir(self.f + "/title/%08x/%08x/content" % (tmd.tmd.titleid >> 32, tmd.tmd.titleid & 0xFFFFFFFF))):
+					os.mkdir(self.f + "/title/%08x/%08x/content" % (tmd.tmd.titleid >> 32, tmd.tmd.titleid & 0xFFFFFFFF))
+				outfp = open(self.f + "/title/%08x/%08x/content/%08x.app" % (tmd.tmd.titleid >> 32, tmd.tmd.titleid & 0xFFFFFFFF, contents[i].cid), "wb")
+			elif(contents[i].type == 0x8001):
+				cmfp = open(self.f + "/shared1/content.map", "rb")
+				cmdict = {}
+				data = cmfp.read()
+				cmfp.seek(0)
+				cnt = 0
+				num = len(data) / 28
+				for z in range(num):
+					name = cmfp.read(8)
+					hash = cmfp.read(20)
+					cmdict[name] = hash
+					cnt += 1
+				cmdict[cnt] = contents[i].hash
+				cmfp.close()
+				cmfp = open(self.f + "/shared1/content.map", "wb")
+				for key, value in cmdict.iteritems():
+					out = "%08x" % int(key)
+					cmfp.write(out)
+					cmfp.write(value)
+				cmfp.close()
+				outfp = open(self.f + "/shared1/%08x.app" % num, "wb")
+			data = fp.read()
+			fp.close()
+			outfp.write(data)
+			outfp.close()
+		tmd.rawdump(self.f + "/title/%08x/%08x/content/title.tmd.%d" % (tmd.tmd.titleid >> 32, tmd.tmd.titleid & 0xFFFFFFFF, tmd.tmd.title_version))
+		if(not os.path.isdir(self.f + "/ticket/%08x" % (tmd.tmd.titleid >> 32))):
+			os.mkdir(self.f + "/ticket/%08x" % (tmd.tmd.titleid >> 32))
+		tik.rawdump(self.f + "/ticket/%08x/%08x.tik" % (tmd.tmd.titleid >> 32, tmd.tmd.titleid & 0xFFFFFFFF))
+
 class TMD:
 	"""This class allows you to edit TMDs. TMD (Title Metadata) files are used in many places to hold information about titles. The parameter f to the initialization is the filename to open and create a TMD from."""
 	class TMDContent(Struct):
@@ -1088,10 +1162,10 @@ class NUS:
 		self.titleid = titleid
 		self.baseurl = "http://nus.cdn.shop.wii.com/ccs/download/%08x%08x/" % (titleid >> 32, titleid & 0xFFFFFFFF)
 		self.version = version
-	def download(self, fn = "", decrypt = True):
+	def download(self, fn = "", decrypt = True, useidx = True):
 		"""This will download a title from NUS into a directory either specified by fn (if it is not empty) or a directory created by the title id in hex form. If decrypt is true, it will decrypt the contents, otherwise it will not. A certs file is always created to enable easy WAD Packing."""
 		if(fn == ""):
-			fn = "%08x%08x" % (titleid >> 32, titleid & 0xFFFFFFFF)
+			fn = "%08x%08x" % (self.titleid >> 32, self.titleid & 0xFFFFFFFF)
 		try:
 			os.mkdir(fn)
 		except:
@@ -1129,11 +1203,14 @@ class NUS:
 		
 		contents = tmd.getContents()
 		for content in contents:
-			urllib.urlretrieve(self.baseurl + ("%08x" % content.cid), "%08x.app" % content.index)
+			output = content.index
+			if(useidx == False):
+				output = content.cid
+			urllib.urlretrieve(self.baseurl + ("%08x" % content.cid), "%08x.app" % output)
 			
 			if(decrypt):
-				data = open("%08x.app" % content.index, "rb").read(content.size)
-				iv = struct.pack(">H", content.index) + "\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00"
+				data = open("%08x.app" % output, "rb").read(content.size)
+				iv = struct.pack(">H", output) + "\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00"
 				if(len(data) % 16 != 0):
 					tmpdata = AES.new(titlekey, AES.MODE_CBC, iv).decrypt(data + ("\x00" * (16 - (len(data) % 16))))[:len(data)]
 				else:
@@ -1142,6 +1219,6 @@ class NUS:
 					raise ValueError("Decryption failed! SHA1 mismatch.")
 				open("%08x.app" % content.index, "wb").write(tmpdata)
 				
-		os.chdir("..")
+		os.chdir("../")
 		
 		
