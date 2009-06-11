@@ -785,7 +785,7 @@ class LZ77():
 			return self.f
 
 class Ticket:	
-	"""Creates a ticket from the filename defined in f. This may take a longer amount of time than expected, as it also decrypts the title key."""
+	"""Creates a ticket from the filename defined in f. This may take a longer amount of time than expected, as it also decrypts the title key. Now supports Korean tickets (but their title keys stay Korean on dump)."""
 	class TicketStruct(Struct):
 		__endian__ = Struct.BE
 		def __format__(self):
@@ -806,15 +806,20 @@ class Ticket:
 			self.reserved = Struct.string(80)
 			self.unk3 = Struct.uint16
 			self.limits = Struct.string(96)
-	def __init__(self, f):
+	def __init__(self, f, korean = False):
 		self.f = f
 		data = open(f, "rb").read()
 		self.tik = self.TicketStruct()
 		self.tik.unpack(data[:len(self.tik)])
 		
 		commonkey = "\xEB\xE4\x2A\x22\x5E\x85\x93\xE4\x48\xD9\xC5\x45\x73\x81\xAA\xF7"
+		koreankey = "\x63\xb8\x2b\xb4\xf4\x61\x4e\x2e\x13\xf2\xfe\xfb\xba\x4c\x9b\x7e"
+		
+		if(self.tik.commonkey_index == 1): #korean!
+			commonkey = koreankey
+		
 		iv = struct.pack(">Q", self.tik.titleid) + "\x00\x00\x00\x00\x00\x00\x00\x00"
-			
+		
 		self.titlekey = AES.new(commonkey, AES.MODE_CBC, iv).decrypt(self.tik.enctitlekey)
 	def getTitleKey(self):
 		"""Returns a string containing the title key."""
@@ -882,10 +887,11 @@ class NAND:
 			os.mkdir(f + "/title")
 		if(not os.path.isdir(f + "/tmp")):
 			os.mkdir(f + "/tmp")
-	def importFromTMDTik(self, tmd, tik):
+	def importFromTMDTik(self, prefix, tmd, tik):
+		"""When passed a prefix (the directory to obtain the .app files from, sorted by content id), a tmd instance, and a ticket instance, this will add that title to the NAND base folder specified in the constructor."""
 		contents = tmd.getContents()
 		for i in range(tmd.tmd.numcontents):
-			fp = open("%08x.app" % contents[i].cid, "rb")
+			fp = open(prefix + "/%08x.app" % contents[i].cid, "rb")
 			if(contents[i].type == 0x0001):
 				if(not os.path.isdir(self.f + "/title/%08x" % (tmd.tmd.titleid >> 32))):
 					os.mkdir(self.f + "/title/%08x" % (tmd.tmd.titleid >> 32))
@@ -893,25 +899,43 @@ class NAND:
 					os.mkdir(self.f + "/title/%08x/%08x" % (tmd.tmd.titleid >> 32, tmd.tmd.titleid & 0xFFFFFFFF))
 				if(not os.path.isdir(self.f + "/title/%08x/%08x/content" % (tmd.tmd.titleid >> 32, tmd.tmd.titleid & 0xFFFFFFFF))):
 					os.mkdir(self.f + "/title/%08x/%08x/content" % (tmd.tmd.titleid >> 32, tmd.tmd.titleid & 0xFFFFFFFF))
+				if(not os.path.isdir(self.f + "/title/%08x/%08x/data" % (tmd.tmd.titleid >> 32, tmd.tmd.titleid & 0xFFFFFFFF))):
+					os.mkdir(self.f + "/title/%08x/%08x/data" % (tmd.tmd.titleid >> 32, tmd.tmd.titleid & 0xFFFFFFFF))	
 				outfp = open(self.f + "/title/%08x/%08x/content/%08x.app" % (tmd.tmd.titleid >> 32, tmd.tmd.titleid & 0xFFFFFFFF, contents[i].cid), "wb")
-			elif(contents[i].type == 0x8001):
+			elif(contents[i].type & 0x8000):
+				nonsharedpath = "/title/%08x/%08x/content/%08x.app" % (tmd.tmd.titleid >> 32, tmd.tmd.titleid & 0xFFFFFFFF, contents[i].cid)
+				
 				cmfp = open(self.f + "/shared1/content.map", "rb")
 				cmdict = {}
-				data = cmfp.read()
-				cmfp.seek(0)
 				cnt = 0
-				num = len(data) / 28
+				num = len(cmfp.read()) / 28
+				cmfp.seek(0)
 				for z in range(num):
 					name = cmfp.read(8)
 					hash = cmfp.read(20)
 					cmdict[name] = hash
 					cnt += 1
-				cmdict[cnt] = contents[i].hash
+				skip = False
+				for key, value in cmdict.iteritems():
+					if(value == contents[i].hash):
+						skip = True
+						try: #try for a symlink
+							os.symlink(self.f + "/shared1/%s.app" % key, nonsharedpath)
+						except: #windows fail
+							pass
+				if(skip):
+					continue
+				
+				cmdict["%08x" % cnt] = contents[i].hash
+				try: #try for a symlink...
+					os.symlink(self.f + "/shared1/%08x.app" % cnt, nonsharedpath)
+				except: #windows fail
+					pass
+					
 				cmfp.close()
 				cmfp = open(self.f + "/shared1/content.map", "wb")
 				for key, value in cmdict.iteritems():
-					out = "%08x" % int(key)
-					cmfp.write(out)
+					cmfp.write(key)
 					cmfp.write(value)
 				cmfp.close()
 				outfp = open(self.f + "/shared1/%08x.app" % num, "wb")
@@ -923,6 +947,19 @@ class NAND:
 		if(not os.path.isdir(self.f + "/ticket/%08x" % (tmd.tmd.titleid >> 32))):
 			os.mkdir(self.f + "/ticket/%08x" % (tmd.tmd.titleid >> 32))
 		tik.rawdump(self.f + "/ticket/%08x/%08x.tik" % (tmd.tmd.titleid >> 32, tmd.tmd.titleid & 0xFFFFFFFF))
+	def contentByHash(self, hash):
+		"""When passed a sha1 hash (string of length 20), this will return the path name (including the NAND FS prefix) to the shared content specified by the hash in content.map. Note that if the content is not found, it will return False - not an empty string."""
+		cmfp = open(self.f + "/shared1/content.map", "rb")
+		cmdict = {}
+		num = len(data) / 28
+		for z in range(num):
+			name = cmfp.read(8)
+			hash = cmfp.read(20)
+			cmdict[name] = hash
+		for key, value in cmdict.iteritems():
+			if(value == hash):
+				return self.f + "/shared1/%s.app" % key
+		return False #not found
 
 class TMD:
 	"""This class allows you to edit TMDs. TMD (Title Metadata) files are used in many places to hold information about titles. The parameter f to the initialization is the filename to open and create a TMD from."""
@@ -1163,7 +1200,7 @@ class NUS:
 		self.baseurl = "http://nus.cdn.shop.wii.com/ccs/download/%08x%08x/" % (titleid >> 32, titleid & 0xFFFFFFFF)
 		self.version = version
 	def download(self, fn = "", decrypt = True, useidx = True):
-		"""This will download a title from NUS into a directory either specified by fn (if it is not empty) or a directory created by the title id in hex form. If decrypt is true, it will decrypt the contents, otherwise it will not. A certs file is always created to enable easy WAD Packing."""
+		"""This will download a title from NUS into a directory either specified by fn (if it is not empty) or a directory created by the title id in hex form. If decrypt is true, it will decrypt the contents, otherwise it will not. A certs file is always created to enable easy WAD Packing. The parameter useidx specifies wheither to use the index or the content id for the file naming (default is index)."""
 		if(fn == ""):
 			fn = "%08x%08x" % (self.titleid >> 32, self.titleid & 0xFFFFFFFF)
 		try:
@@ -1203,9 +1240,10 @@ class NUS:
 		
 		contents = tmd.getContents()
 		for content in contents:
-			output = content.index
-			if(useidx == False):
-				output = content.cid
+			output = content.cid
+			if(useidx):
+				output = content.index
+				
 			urllib.urlretrieve(self.baseurl + ("%08x" % content.cid), "%08x.app" % output)
 			
 			if(decrypt):
@@ -1215,9 +1253,9 @@ class NUS:
 					tmpdata = AES.new(titlekey, AES.MODE_CBC, iv).decrypt(data + ("\x00" * (16 - (len(data) % 16))))[:len(data)]
 				else:
 					tmpdata = AES.new(titlekey, AES.MODE_CBC, iv).decrypt(data)
-				if(hashlib.sha1(data).digest() != content.hash):
-					raise ValueError("Decryption failed! SHA1 mismatch.")
-				open("%08x.app" % content.index, "wb").write(tmpdata)
+				#if(hashlib.sha1(tmpdata).digest() != content.hash):
+				#	raise ValueError("Decryption failed! SHA1 mismatch.")
+				open("%08x.app" % output, "wb").write(tmpdata)
 				
 		os.chdir("../")
 		
