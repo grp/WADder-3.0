@@ -43,7 +43,7 @@ def doApp(self): #we can ignore self
 		
 	wad = wadder.wadtab.wad.GetValue()
 	if(os.path.exists(wad) != True):
-		wx.MessageBox('WAD selected must exist and WAD must be entered.', 'Error', wx.OK | wx.ICON_ERROR)
+		wx.MessageBox('WAD must be entered and WAD selected must exist.', 'Error', wx.OK | wx.ICON_ERROR)
 		return
 		
 	sound = wadder.opttab.sound.GetValue()
@@ -181,6 +181,9 @@ class ImagePanel(wx.Panel):
 		viewbtn = wx.Button(self, -1, "Preview", (185, 260), (80, -1))
 		self.Bind(wx.EVT_BUTTON, self.viewbutton, viewbtn)
 		
+		self.gobtn = wx.Button(self, -1, "Continue", (60, 290), (160, -1))
+		self.Bind(wx.EVT_BUTTON, self.close, self.gobtn)
+		
 		self.Show(True)
 	def replacebutton(self, evt):
 		dlg = wx.FileDialog(self, "Choose a an image to replace...", "", "", "PNG images (*.png)|*.png|All Files (*.*)|*.*", wx.OPEN)
@@ -195,37 +198,26 @@ class ImagePanel(wx.Panel):
 		if dlg.ShowModal() == wx.ID_OK:
 			wii.TPL(self.dir + "/" + self.list.GetStringSelection()).toPNG(dlg.GetPath())
 		dlg.Destroy()
-
-
-
-class ImageUI(wx.Frame):
-	def __init__(self, parent, title):
-		wx.Frame.__init__(self, parent, -1, title, (-1, -1), (300, 400))
-		panel = wx.Panel(self)
-		
-		self.gobtn = wx.Button(panel, -1, "Continue", (70, 350), (160, -1))
-		self.Bind(wx.EVT_BUTTON, self.close, self.gobtn)
-		
-		self.Show(True)
 	def close(self, evt):
 		wx.Exit()
 
 
 class ImageEditor(wx.App):
 	def OnInit(self):
-		debug("Starting Image Editor")
-		
-		frame = ImageUI(None, "Image Editor")
+		frame = wx.Frame(None, -1, "Image Editor", (-1, -1), (275, 380))
         
-		nb = wx.Notebook(frame, -1, (5, 5), (280, 330))
+		nb = wx.Notebook(frame, -1, (0, 0), (275, 380))
 		
 		self.bannertab = ImagePanel(nb, -1, "wadunpack/00000000_app_out/meta/banner_bin_out/arc/timg")
    		nb.AddPage(self.bannertab, "Banner")
    		
    		self.icontab = ImagePanel(nb, -1, "wadunpack/00000000_app_out/meta/icon_bin_out/arc/timg")
    		nb.AddPage(self.icontab, "Icon")
+   		
+   		frame.Show(True)
 
 		return True
+
 
 
 
@@ -234,7 +226,7 @@ class WADPanel(wx.Panel):
 	def __init__(self, parent, id):
 		wx.Panel.__init__(self, parent, id)
 		
-		wx.StaticText(self, -1, "WAD to edit:", (5, 30))
+		wx.StaticText(self, -1, "WAD to edit:", (5, 32))
 		#wx.StaticText(self, -1, "Edit the...", (5, 60))
 		
 		#self.banner = wx.RadioButton(self, -1, "banner,", (90, 60), style = wx.RB_GROUP)
@@ -246,6 +238,9 @@ class WADPanel(wx.Panel):
 		wadbtn = wx.Button(self, -1, "Browse...", (340, 30), (80, -1))
 		self.Bind(wx.EVT_BUTTON, self.wadbutton, wadbtn)
 		self.wad = wx.TextCtrl(self, -1, "", (90, 30), (245, -1))
+		
+		thegobtn = wx.Button(self, -1, "Create WAD!", (130, 170), (160, -1))
+		self.Bind(wx.EVT_BUTTON, doApp, thegobtn)
 		
 		self.Show(True)
 	def wadbutton(self, evt):
@@ -349,39 +344,28 @@ class ExPanel(wx.Panel):
 			self.icon.SetValue(dlg.GetPath())
 		dlg.Destroy()
 
-class WADderUI(wx.Frame):
-    def __init__(self, parent, title):
-		wx.Frame.__init__(self, parent, -1, title, (150, 150), (437, 300))
-		panel = wx.Panel(self)
-		
-		self.gobtn = wx.Button(panel, -1, "Create WAD!", (130, 250), (160, -1))
-		self.Bind(wx.EVT_BUTTON, doApp, self.gobtn)
-		
-		self.Show(True)
-		
-    def close(self, evt):
-        self.Close()
-
 
 class WADder(wx.App):
 	def OnInit(self):
-		debug("Starting WADder 3.0 PREALPHA")
+		frame = wx.Frame(None, -1, "WADder 3 by [ icefire ]", (150, 150), (440, 270))#, wx.SYSTEM_MENU | wx.MINIMIZE_BOX | wx.MAXIMIZE_BOX | wx.CLOSE_BOX)
+		panel = wx.Panel(frame)
+		panel.Show(True)
 		
-		frame = WADderUI(None, "WADder 3 by [ icefire ]")
-        
-		nb = wx.Notebook(frame, -1, (5, 5), (430, 240))
+		nb = wx.Notebook(frame, -1, (0, 0), (440, 270))
 		
 		self.wadtab = WADPanel(nb, -1)
-   		nb.AddPage(self.wadtab, "WAD")
-   		
-   		self.titletab = TitlePanel(nb, -1)
-   		nb.AddPage(self.titletab, "Title")
-   		
-   		self.opttab = OptPanel(nb, -1)
-   		nb.AddPage(self.opttab, "Options")
-   		
-   		self.extab = ExPanel(nb, -1)
-   		nb.AddPage(self.extab, "Exchange")
+		nb.AddPage(self.wadtab, "WAD")
+		
+		self.titletab = TitlePanel(nb, -1)
+		nb.AddPage(self.titletab, "Title")
+		
+		self.opttab = OptPanel(nb, -1)
+		nb.AddPage(self.opttab, "Options")
+		
+		self.extab = ExPanel(nb, -1)
+		nb.AddPage(self.extab, "Exchange")
+		
+   		frame.Show(True)
 		
 		return True
 
