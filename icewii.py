@@ -20,8 +20,9 @@ class Crypto:
 			return AES.new(titlekey, AES.MODE_CBC, iv).decrypt(data)
 	def ValidateHash(self, data, hash):
 		"""Validates a hash. (BROKEN)"""
+		return 1 #hack
 #		if(hashlib.sha1(data).digest() == hash):
-			return 1
+#			return 1
 #		else:
 #			return 0
 
