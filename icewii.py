@@ -1,4 +1,4 @@
-import os, hashlib, struct, subprocess, fnmatch, shutil, urllib
+import os, hashlib, struct, subprocess, fnmatch, shutil, urllib, array
 import wx
 from Crypto.Cipher import AES
 import png
@@ -6,6 +6,24 @@ from Struct import Struct
 
 def align(x, boundary):
 	return x + (x % boundary)
+
+class Crypto:
+	"""This is a Cryptographic/hash class used to abstract away things (to make changes easier)"""
+	def __init__(self):
+		return
+	def DecryptContent(self, titlekey, idx, data):
+		"""Decrypts a Content."""
+		iv = struct.pack(">H", idx) + "\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00"
+		if(len(data) % 16 != 0):
+			return AES.new(titlekey, AES.MODE_CBC, iv).decrypt(data + ("\x00" * (16 - (len(data) % 16))))[:len(data)]
+		else:
+			return AES.new(titlekey, AES.MODE_CBC, iv).decrypt(data)
+	def ValidateHash(self, data, hash):
+		"""Validates a hash. (BROKEN)"""
+#		if(hashlib.sha1(data).digest() == hash):
+			return 1
+#		else:
+#			return 0
 
 class TPL():
 	"""This is the class to generate TPL texutres from PNG images, and to convert TPL textures to PNG images. The parameter file specifies the filename of the source, either a PNG image or a TPL image.
@@ -123,7 +141,7 @@ class TPL():
 		"""This converts a TPL texture to a PNG image. You specify the input TPL filename in the initializer, and you specify the output filename in the outfile parameter to this method. Returns the output filename.
 		
 		This only supports single textured TPL images."""
-		data = open(self.file).read()
+		data = open(self.file, "rb").read()
 		
 		header = self.TPLHeader()
 		textures = []
@@ -182,7 +200,7 @@ class TPL():
 		return outfile
 	def getSizes(self):
 		"""This returns a tuple containing the width and height of the TPL image filename in the class initializer. Will only return the size of single textured TPL images."""
-		data = open(self.file).read()
+		data = open(self.file, "rb").read()
 		
 		header = self.TPLHeader()
 		textures = []
@@ -512,7 +530,7 @@ class U8():
 		``filename_extension_out``
 		
 		This will recreate the directory structure, including the initial root folder in the U8 archive (such as "arc" or "meta"). Returns the output directory name."""
-		data = open(self.f).read()
+		data = open(self.f, "rb").read()
 		
 		offset = 0
 		
@@ -809,13 +827,14 @@ class Ticket:
 	def __init__(self, f, korean = False):
 		self.f = f
 		data = open(f, "rb").read()
+		self.size = len(data)
 		self.tik = self.TicketStruct()
 		self.tik.unpack(data[:len(self.tik)])
 		
 		commonkey = "\xEB\xE4\x2A\x22\x5E\x85\x93\xE4\x48\xD9\xC5\x45\x73\x81\xAA\xF7"
-		koreankey = "\x63\xb8\x2b\xb4\xf4\x61\x4e\x2e\x13\xf2\xfe\xfb\xba\x4c\x9b\x7e"
+		koreankey = "\x63\xB8\x2B\xB4\xF4\x61\x4E\x2E\x13\xF2\xFE\xFB\xBA\x4C\x9B\x7E"
 		
-		if(self.tik.commonkey_index == 1): #korean!
+		if(self.tik.commonkey_index == 1): #korean, kekekekek!
 			commonkey = koreankey
 		
 		iv = struct.pack(">Q", self.tik.titleid) + "\x00\x00\x00\x00\x00\x00\x00\x00"
@@ -859,6 +878,7 @@ class NAND:
 	"""This class performs all NAND related things. It includes functions to copy a title (given the TMD) into the correct structure as the Wii does, and will eventually have an entire ES-like system. Parameter f to the initializer is the folder that will be used as the NAND root."""
 	def __init__(self, f):
 		self.f = f
+		self.ES = ESClass(self)
 		if(not os.path.isdir(f)):
 			os.mkdir(f)
 		if(not os.path.isdir(f + "/import")):
@@ -887,66 +907,6 @@ class NAND:
 			os.mkdir(f + "/title")
 		if(not os.path.isdir(f + "/tmp")):
 			os.mkdir(f + "/tmp")
-	def importFromTMDTik(self, prefix, tmd, tik):
-		"""When passed a prefix (the directory to obtain the .app files from, sorted by content id), a tmd instance, and a ticket instance, this will add that title to the NAND base folder specified in the constructor."""
-		contents = tmd.getContents()
-		for i in range(tmd.tmd.numcontents):
-			fp = open(prefix + "/%08x.app" % contents[i].cid, "rb")
-			if(contents[i].type == 0x0001):
-				if(not os.path.isdir(self.f + "/title/%08x" % (tmd.tmd.titleid >> 32))):
-					os.mkdir(self.f + "/title/%08x" % (tmd.tmd.titleid >> 32))
-				if(not os.path.isdir(self.f + "/title/%08x/%08x" % (tmd.tmd.titleid >> 32, tmd.tmd.titleid & 0xFFFFFFFF))):
-					os.mkdir(self.f + "/title/%08x/%08x" % (tmd.tmd.titleid >> 32, tmd.tmd.titleid & 0xFFFFFFFF))
-				if(not os.path.isdir(self.f + "/title/%08x/%08x/content" % (tmd.tmd.titleid >> 32, tmd.tmd.titleid & 0xFFFFFFFF))):
-					os.mkdir(self.f + "/title/%08x/%08x/content" % (tmd.tmd.titleid >> 32, tmd.tmd.titleid & 0xFFFFFFFF))
-				if(not os.path.isdir(self.f + "/title/%08x/%08x/data" % (tmd.tmd.titleid >> 32, tmd.tmd.titleid & 0xFFFFFFFF))):
-					os.mkdir(self.f + "/title/%08x/%08x/data" % (tmd.tmd.titleid >> 32, tmd.tmd.titleid & 0xFFFFFFFF))	
-				outfp = open(self.f + "/title/%08x/%08x/content/%08x.app" % (tmd.tmd.titleid >> 32, tmd.tmd.titleid & 0xFFFFFFFF, contents[i].cid), "wb")
-			elif(contents[i].type & 0x8000):
-				nonsharedpath = "/title/%08x/%08x/content/%08x.app" % (tmd.tmd.titleid >> 32, tmd.tmd.titleid & 0xFFFFFFFF, contents[i].cid)
-				
-				cmfp = open(self.f + "/shared1/content.map", "rb")
-				cmdict = {}
-				cnt = 0
-				num = len(cmfp.read()) / 28
-				cmfp.seek(0)
-				for z in range(num):
-					name = cmfp.read(8)
-					hash = cmfp.read(20)
-					cmdict[name] = hash
-					cnt += 1
-				skip = False
-				for key, value in cmdict.iteritems():
-					if(value == contents[i].hash):
-						skip = True
-						try: #try for a symlink
-							os.symlink(self.f + "/shared1/%s.app" % key, nonsharedpath)
-						except: #windows fail
-							pass
-				if(skip):
-					continue
-				
-				cmdict["%08x" % cnt] = contents[i].hash
-				try: #try for a symlink...
-					os.symlink(self.f + "/shared1/%08x.app" % cnt, nonsharedpath)
-				except: #windows fail
-					pass
-					
-				cmfp.close()
-				cmfp = open(self.f + "/shared1/content.map", "wb")
-				for key, value in cmdict.iteritems():
-					cmfp.write(key)
-					cmfp.write(value)
-				cmfp.close()
-				outfp = open(self.f + "/shared1/%08x.app" % num, "wb")
-			data = fp.read()
-			fp.close()
-			outfp.write(data)
-			outfp.close()
-		tmd.rawdump(self.f + "/title/%08x/%08x/content/title.tmd.%d" % (tmd.tmd.titleid >> 32, tmd.tmd.titleid & 0xFFFFFFFF, tmd.tmd.title_version))
-		if(not os.path.isdir(self.f + "/ticket/%08x" % (tmd.tmd.titleid >> 32))):
-			os.mkdir(self.f + "/ticket/%08x" % (tmd.tmd.titleid >> 32))
-		tik.rawdump(self.f + "/ticket/%08x/%08x.tik" % (tmd.tmd.titleid >> 32, tmd.tmd.titleid & 0xFFFFFFFF))
 	def contentByHash(self, hash):
 		"""When passed a sha1 hash (string of length 20), this will return the path name (including the NAND FS prefix) to the shared content specified by the hash in content.map. Note that if the content is not found, it will return False - not an empty string."""
 		cmfp = open(self.f + "/shared1/content.map", "rb")
@@ -960,6 +920,225 @@ class NAND:
 			if(value == hash):
 				return self.f + "/shared1/%s.app" % key
 		return False #not found
+	def addContentToMap(self, contentid, hash):
+		"""Adds a content to the content.map file for the contentid and hash.
+		Returns the content id."""
+		cmfp = open(self.f + "/shared1/content.map", "rb")
+		cmdict = {}
+		num = len(cmfp.read()) / 28
+		cmfp.seek(0)
+		for z in range(num):
+			name = cmfp.read(8)
+			hash = cmfp.read(20)
+			cmdict[name] = hash
+		cmdict["%08x" % contentid] = hash
+		cmfp.close()
+		cmfp = open(self.f + "/shared1/content.map", "wb")
+		for key, value in cmdict.iteritems():
+			cmfp.write(key)
+			cmfp.write(value)
+		cmfp.close()
+		return contentid
+	def addHashToMap(self, hash):
+		"""Adds a content to the content.map file for the hash (uses next unavailable content id)
+		 Returns the content id."""
+		cmfp = open(self.f + "/shared1/content.map", "rb")
+		cmdict = {}
+		cnt = 0
+		num = len(cmfp.read()) / 28
+		cmfp.seek(0)
+		for z in range(num):
+			name = cmfp.read(8)
+			hasho = cmfp.read(20)
+			cmdict[name] = hasho
+			cnt += 1
+		cmdict["%08x" % cnt] = hash
+		cmfp.close()
+		cmfp = open(self.f + "/shared1/content.map", "wb")
+		for key, value in cmdict.iteritems():
+			cmfp.write(key)
+			cmfp.write(value)
+		cmfp.close()
+		return cnt
+	def importTitle(self, prefix, tmd, tik):
+		"""When passed a prefix (the directory to obtain the .app files from, sorted by content id), a TMD instance, and a Ticket instance, this will add that title to the NAND base folder specified in the constructor."""
+		self.ES.AddTitleStart(tmd, None, None)
+		self.ES.AddTitleTMD(tmd)
+		self.ES.AddTicket(tik)
+		contents = tmd.getContents()
+		for i in range(tmd.tmd.numcontents):
+			self.ES.AddContentStart(tmd.tmd.titleid, contents[i].cid)
+			fp = open(prefix + "/%08x.app" % contents[i].cid, "rb")
+			data = fp.read()
+			fp.close()
+			self.ES.AddContentData(contents[i].cid, data)
+			self.ES.AddContentFinish(contents[i].cid)
+		self.ES.AddTitleFinish()
+		
+class ESClass:
+	"""This class performs all services relating to titles installed on the Wii. It is a clone of the libogc ES interface.
+	The nand argument to the initializer is a NAND object."""
+	def __init__(self, nand):
+		self.ticketadded = 0
+		self.tmdadded = 0
+		self.workingcid = 0
+		self.workingcidcnt = 0
+		self.nand = nand
+		self.f = nand.f
+	def getContentIndexFromCID(self, tmd, cid):
+		"""Gets the content index from the content id cid referenced to in the TMD instance tmd."""
+		for i in range(tmd.tmd.numcontents):
+			if(cid == tmd.contents[i].cid):
+				return tmd.contents[i].index
+		return None
+	def GetDataDir(self, titleid):
+		"""When passed a titleid, it will get the Titles data directory. If there is no title associated with titleid, it will return None."""
+		if(not os.path.isdir(self.f + "/title/%08x/%08x/data" % (titleid >> 32, titleid & 0xFFFFFFFF))):
+			return None
+		return self.f + "/title/%08x/%08x/data" % (titleid >> 32, titleid & 0xFFFFFFFF)
+	def GetStoredTMD(self, titleid, version):
+		"""Gets the TMD for the specified titleid and version"""
+		if(not os.path.isfile(self.f + "/title/%08x/%08x/content/title.tmd.%d" % (titleid >> 32, titleid & 0xFFFFFFFF, version))):
+			return None
+		return TMD(self.f + "/title/%08x/%08x/content/title.tmd.%d" % (titleid >> 32, titleid & 0xFFFFFFFF, version))
+	def GetTitleContentsCount(self, titleid, version):
+		"""Gets the number of contents the title with the specified titleid and version has."""
+		tmd = self.GetStoredTMD(titleid, version)
+		if(tmd == None):
+			return 0
+		return tmd.tmd.numcontents
+	def GetNumSharedContents(self):
+		"""Gets how many shared contents exist on the NAND"""
+		cmfp = open(self.f + "/shared1/content.map", "rb")
+		cmdict = {}
+		cnt = 0
+		num = len(cmfp.read()) / 28
+		cmfp.seek(0)
+		for z in range(num):
+			name = cmfp.read(8)
+			hash = cmfp.read(20)
+			cmdict[name] = hash
+			cnt += 1
+		cmfp.close()
+		return cnt
+	def GetSharedContents(self, cnt):
+		"""Gets cnt amount of shared content hashes"""
+		cmfp = open(self.f + "/shared1/content.map", "rb")
+		num = len(cmfp.read()) / 28
+		cmfp.seek(0)
+		hashout = ""
+		for z in range(num):
+			name = cmfp.read(8)
+			hashout += cmfp.read(20)
+		cmfp.close()
+		return hashout
+	def AddTitleStart(self, tmd, certs, crl):
+		if(not os.path.isdir(self.f + "/title/%08x" % (tmd.tmd.titleid >> 32))):
+			os.mkdir(self.f + "/title/%08x" % (tmd.tmd.titleid >> 32))
+		if(not os.path.isdir(self.f + "/title/%08x/%08x" % (tmd.tmd.titleid >> 32, tmd.tmd.titleid & 0xFFFFFFFF))):
+			os.mkdir(self.f + "/title/%08x/%08x" % (tmd.tmd.titleid >> 32, tmd.tmd.titleid & 0xFFFFFFFF))
+		if(not os.path.isdir(self.f + "/title/%08x/%08x/content" % (tmd.tmd.titleid >> 32, tmd.tmd.titleid & 0xFFFFFFFF))):
+			os.mkdir(self.f + "/title/%08x/%08x/content" % (tmd.tmd.titleid >> 32, tmd.tmd.titleid & 0xFFFFFFFF))
+		if(not os.path.isdir(self.f + "/title/%08x/%08x/data" % (tmd.tmd.titleid >> 32, tmd.tmd.titleid & 0xFFFFFFFF))):
+			os.mkdir(self.f + "/title/%08x/%08x/data" % (tmd.tmd.titleid >> 32, tmd.tmd.titleid & 0xFFFFFFFF))	
+		if(not os.path.isdir(self.f + "/ticket/%08x" % (tmd.tmd.titleid >> 32))):
+			os.mkdir(self.f + "/ticket/%08x" % (tmd.tmd.titleid >> 32))
+		self.workingcids = array.array('L')
+		self.wtitleid = tmd.tmd.titleid
+		return
+	def AddTicket(self, tik):
+		"""Adds ticket to the title being added."""
+		tik.rawdump(self.f + "/tmp/title.tik")
+		self.ticketadded = 1
+	def DeleteTicket(self, tikview):
+		"""Deletes the ticket relating to tikview
+		(UNIMPLEMENTED!)"""
+		return
+	def AddTitleTMD(self, tmd):
+		"""Adds TMD to the title being added."""
+		tmd.rawdump(self.f + "/tmp/title.tmd")
+		self.tmdadded = 1
+	def AddContentStart(self, titleid, cid):
+		"""Starts adding a content with content id cid to the title being added with ID titleid."""
+		if((self.workingcid != 0) and (self.workingcid != None)):
+			"Trying to start an already existing process"
+			return -41
+		if(self.tmdadded):
+			a = TMD(self.f + "/tmp/title.tmd")
+		else:
+			a = TMD(self.f + "/title/%08x/%08x/content/title.tmd.%d" % (self.wtitleid >> 32, self.wtitleid & 0xFFFFFFFF, tmd.tmd.title_version))
+		x = self.getContentIndexFromCID(a, cid)
+		if(x == None):
+			"Not a valid Content ID"
+			return -43
+		self.workingcid = cid
+		self.workingfp = open(self.f + "/tmp/%08x.app" % cid, "wb")
+		return 0
+	def AddContentData(self, cid, data):
+		"""Adds data to the content cid being added."""
+		if(cid != self.workingcid):
+			"Working on the not current CID"
+			return -40
+		self.workingfp.write(data);
+		return 0
+	def AddContentFinish(self, cid):
+		"""Finishes the content cid being added."""
+		if(cid != self.workingcid):
+			"Working on the not current CID"
+			return -40
+		self.workingfp.close()
+		self.workingcids.append(cid)
+		self.workingcidcnt += 1
+		self.workingcid = None
+		return 0
+	def AddTitleCancel(self):
+		"""Cancels adding a title (deletes the tmp files and resets status)."""
+		if(self.ticketadded):
+			os.remove(self.f + "/tmp/title.tik")
+			self.ticketadded = 0
+		if(self.tmdadded):
+			os.remove(self.f + "/tmp/title.tmd")
+			self.tmdadded = 0
+		for i in range(self.workingcidcnt):
+			os.remove(self.f + "/tmp/%08x.app" % self.workingcids[i])
+		self.workingcidcnt = 0
+		self.workingcid = None
+	def AddTitleFinish(self):
+		"""Finishes the adding of a title."""
+		if(self.ticketadded):
+			tik = Ticket(self.f + "/tmp/title.tik")
+		else:
+			tik = Ticket(self.f + "/ticket/%08x/%08x.tik" % (self.wtitleid >> 32, self.wtitleid & 0xFFFFFFFF))
+		if(self.tmdadded):
+			tmd = TMD(self.f + "/tmp/title.tmd")
+		contents = tmd.getContents()
+		for i in range(self.workingcidcnt):
+			idx = self.getContentIndexFromCID(tmd, self.workingcids[i])
+			if(idx == None):
+				print "Content ID doesn't exist!"
+				return -42
+			fp = open(self.f + "/tmp/%08x.app" % self.workingcids[i], "rb")
+			if(contents[idx].type == 0x0001):
+				filestr = self.f + "/title/%08x/%08x/content/%08x.app" % (self.wtitleid >> 32, self.wtitleid & 0xFFFFFFFF, self.workingcids[i])
+			elif(contents[idx].type == 0x8001):
+				num = self.nand.addHashToMap(contents[idx].hash)
+				filestr = self.f + "/shared1/%08x.app" % num
+			outfp = open(filestr, "wb")
+			data = fp.read()
+			titlekey = tik.getTitleKey()
+			tmpdata = Crypto().DecryptContent(titlekey, contents[idx].index, data)
+			if(Crypto().ValidateHash(tmpdata, contents[idx].hash) == 0):
+				"Decryption failed! SHA1 mismatch."
+				return -44
+			fp.close()
+			outfp.write(tmpdata)
+			outfp.close()
+		if(self.tmdadded):
+			tmd.rawdump(self.f + "/title/%08x/%08x/content/title.tmd.%d" % (self.wtitleid >> 32, self.wtitleid & 0xFFFFFFFF, tmd.tmd.title_version))
+		if(self.ticketadded):
+			tik.rawdump(self.f + "/ticket/%08x/%08x.tik" % (self.wtitleid >> 32, self.wtitleid & 0xFFFFFFFF))
+		self.AddTitleCancel()
+		return 0
 
 class TMD:
 	"""This class allows you to edit TMDs. TMD (Title Metadata) files are used in many places to hold information about titles. The parameter f to the initialization is the filename to open and create a TMD from."""
@@ -1108,11 +1287,7 @@ class WAD:
 			if(tmpsize % 16 != 0):
 				tmpsize += 16 - (tmpsize % 16)
 			tmptmpdata = fd.read(tmpsize)
-			if len(tmptmpdata) % 16 != 0:
-				tmpdata = AES.new(titlekey, AES.MODE_CBC, struct.pack(">H", contents[i].index) + "\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00").decrypt(tmptmpdata + ("\x00" * (16 - (len(tmpsize) % 16))))[:len(tmpsize)]
-			else:
-				tmpdata = AES.new(titlekey, AES.MODE_CBC, struct.pack(">H", contents[i].index) + "\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00").decrypt(tmptmpdata)
-			
+			tmpdata = Crypto().DecryptContent(titlekey, contents[i].index, tmptmpdata)
 			open("%08x.app" % contents[i].index, "wb").write(tmpdata)
 			if(tmpsize % 64 != 0):
 				fd.seek(64 - (tmpsize % 64), 1)
@@ -1248,15 +1423,9 @@ class NUS:
 			
 			if(decrypt):
 				data = open("%08x.app" % output, "rb").read(content.size)
-				iv = struct.pack(">H", output) + "\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00"
-				if(len(data) % 16 != 0):
-					tmpdata = AES.new(titlekey, AES.MODE_CBC, iv).decrypt(data + ("\x00" * (16 - (len(data) % 16))))[:len(data)]
-				else:
-					tmpdata = AES.new(titlekey, AES.MODE_CBC, iv).decrypt(data)
-				#if(hashlib.sha1(tmpdata).digest() != content.hash):
-				#	raise ValueError("Decryption failed! SHA1 mismatch.")
+				tmpdata = Crypto().DecryptContent(titlekey, content.index, data)
+				if(Crypto().ValidateHash(tmpdata, content.hash) == 0):
+					raise ValueError("Decryption failed! SHA1 mismatch.")
 				open("%08x.app" % output, "wb").write(tmpdata)
 				
 		os.chdir("../")
-		
-		
