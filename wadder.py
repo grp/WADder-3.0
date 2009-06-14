@@ -2,9 +2,8 @@
 # WADder 3.0 pre-alpha
 #----------------------------------------------------------------------
 
-import os, wx, hashlib, shutil, sys
-from Struct import Struct
-import icewii as wii
+import os, wx, hashlib, shutil, sys, threading, time, struct
+import Wii as wii
 
 def debug(text):
 	if text != "":
@@ -14,8 +13,8 @@ def debug(text):
 def clean():
 	dirs = files = []
 
-	#dirs = ["wadunpack", "bintemp"]
-	#files = ["in.wad", "tmp.png", "out.wad"]
+	dirs = ["wadunpack", "bintemp"]
+	files = ["in.wad", "tmp.png", "out.wad"]
 	
 	for item in dirs:
 		try:
@@ -46,10 +45,11 @@ def doApp(self): #we can ignore self
 		wx.MessageBox('WAD must be entered and WAD selected must exist.', 'Error', wx.OK | wx.ICON_ERROR)
 		return
 		
-	sound = wadder.opttab.sound.GetValue()
-	if(os.path.exists(sound) != True and sound != ""):
-		wx.MessageBox('Sound selected must exist.', 'Error')
-		return
+	#sound = wadder.opttab.sound.GetValue()
+	#if(os.path.exists(sound) != True and sound != ""):
+	#	wx.MessageBox('Sound selected must exist.', 'Error')
+	#	return
+	sound = ""
 		
 	title = wadder.titletab.channame.GetValue()
 	if(len(title) > 20):
@@ -80,17 +80,23 @@ def doApp(self): #we can ignore self
 	
 	nandloader = wadder.opttab.nandloader.GetValue()
 	
-	#wx.Exit()
+	wx.Exit()
 	
 	doWADder(wad, titleid, title, sound, dol, nandloader, langs, exchange)
+		
+	dlg = wx.FileDialog(None, "Save completed WAD...", "", "", "Wii Channels (*.wad)|*.wad|All Files (*.*)|*.*", wx.SAVE)
+	if dlg.ShowModal() == wx.ID_OK:
+		shutil.move("out.wad", dlg.GetPath())
+	dlg.Destroy()
 	
-	#sys.exit()
+	sys.exit()
 
 	
 def doWADder(wad, titleid = "", title = "", sound = "", dol = "", nandloader = "", langs = [], exchange = [], loop = 0):
 	shutil.copy(wad, "in.wad")
 
 	wii.WAD("in.wad").unpack("wadunpack")
+	shutil.copy("wadunpack/00000000.app", "old.app")
 	if(title == ""):
 		title = wii.IMET("wadunpack/00000000.app").getTitle()
 	wii.U8(wii.IMET("wadunpack/00000000.app").remove()).unpack()
@@ -127,25 +133,26 @@ def doWADder(wad, titleid = "", title = "", sound = "", dol = "", nandloader = "
 			else:
 				continue #only bin, wad, bnr and app are supported
 		shutil.copy("bintemp/00000000_app_out/meta/" + bin, "wadunpack/00000000_app_out/meta/" + bin)
-		
-	
 
 	wii.U8(wii.LZ77(wii.IMD5("wadunpack/00000000_app_out/meta/banner.bin").remove()).decompress()).unpack()
 	wii.U8(wii.LZ77(wii.IMD5("wadunpack/00000000_app_out/meta/icon.bin").remove()).decompress()).unpack()
 	
 	#do sound stuff, dis is teh hard partz
-		
-	imedit = ImageEditor(redirect=True)
-	imedit.MainLoop()
+	
+	#self.imedit = ImageEditor(redirect=False)
+	#self.imedit.MainLoop()
 
 	wii.IMD5(wii.LZ77(wii.U8("wadunpack/00000000_app_out/meta/banner_bin_out").pack()).compress()).add()
 	wii.IMD5(wii.LZ77(wii.U8("wadunpack/00000000_app_out/meta/icon_bin_out").pack()).compress()).add()
 	wii.IMET(wii.U8("wadunpack/00000000_app_out").pack()).add(os.path.getsize("wadunpack/00000000_app_out/meta/icon.bin"), os.path.getsize("wadunpack/00000000_app_out/meta/banner.bin"), os.path.getsize("wadunpack/00000000_app_out/meta/sound.bin"), title, langs)
 	
+	shutil.copy("wadunpack/00000000.app", "new.app")
+	
 	if(dol != ""):
 		shutil.copy("wadunpack/00000000.app", "00000000.app")
+		shutil.copy("wadunpack/tik", "tik")
+		shutil.copy("wadunpack/cert", "cert")
 		shutil.rmtree("wadunpack")
-		os.mkdir("wadunpack")
 		shutil.copytree("data/" + nandloader, "wadunpack")
 		
 		if(nandloader == "comex"):
@@ -154,14 +161,29 @@ def doWADder(wad, titleid = "", title = "", sound = "", dol = "", nandloader = "
 			dolpath = "00000001.app"
 		
 		shutil.copy(dol, "wadunpack/" + dolpath)
-		shutil.move("00000000.app", "wadunpack/0000000.app")
-
-	wii.WAD("wadunpack").pack("out.wad", titleid)
+		shutil.move("00000000.app", "wadunpack/00000000.app")
+		shutil.move("tik", "wadunpack/tik")
+		shutil.move("cert", "wadunpack/cert")
+		
+		
+	tmd = wii.TMD("wadunpack/tmd")
+	tik = wii.Ticket("wadunpack/tik")
 	
-	dlg = wx.FileDialog(None, "Save completed WAD...", "", "", "Wii Channels (*.wad)|*.wad|All Files (*.*)|*.*", wx.SAVE)
-	if dlg.ShowModal() == wx.ID_OK:
-		shutil.move("out.wad", dlg.GetPath())
-	dlg.Destroy()
+	if(titleid != ""):
+		oldtitleid = tmd.getTitleID()
+		lower = struct.unpack('>I', titleid)[0]
+		newtitleid = ((oldtitleid >> 32) << 32) | lower
+		tmd.setTitleID(newtitleid)
+		tik.setTitleID(newtitleid)
+	
+	
+	tmd.dump()
+	tik.dump()
+	
+	wii.WAD("wadunpack").pack("out.wad")
+	
+	return
+
 	
 
 class ImagePanel(wx.Panel):
@@ -199,8 +221,7 @@ class ImagePanel(wx.Panel):
 			wii.TPL(self.dir + "/" + self.list.GetStringSelection()).toPNG(dlg.GetPath())
 		dlg.Destroy()
 	def close(self, evt):
-		wx.Exit()
-
+		pass
 
 class ImageEditor(wx.App):
 	def OnInit(self):
@@ -217,9 +238,6 @@ class ImageEditor(wx.App):
    		frame.Show(True)
 
 		return True
-
-
-
 
 		
 class WADPanel(wx.Panel):
@@ -289,10 +307,10 @@ class OptPanel(wx.Panel):
 		self.Bind(wx.EVT_BUTTON, self.dolbutton, dolbtn)
 		self.dol = wx.TextCtrl(self, -1, "", (90, 40), (245, -1))
 		
-		wx.StaticText(self, -1, "New Sound:", (5, 103))
-		soundbtn = wx.Button(self, -1, "Browse...", (340, 100), (80, -1))
-		self.Bind(wx.EVT_BUTTON, self.soundbutton, soundbtn)
-		self.sound = wx.TextCtrl(self, -1, "", (90, 100), (245, -1))
+		#wx.StaticText(self, -1, "New Sound:", (5, 103))
+		#soundbtn = wx.Button(self, -1, "Browse...", (340, 100), (80, -1))
+		#self.Bind(wx.EVT_BUTTON, self.soundbutton, soundbtn)
+		#self.sound = wx.TextCtrl(self, -1, "", (90, 100), (245, -1))
 		#self.loop = wx.CheckBox(self, -1, "Loop Sound. Windows only, might not work :(.", (50, 130))
 		
 		wx.StaticText(self, -1, "These are optional. Fill them in only if you want to change them.", (5, 180))
@@ -371,7 +389,7 @@ class WADder(wx.App):
 
 if(__name__ == '__main__'):
 	clean()
-	wadder = WADder(redirect=True)
+	wadder = WADder(redirect=False)
 	wadder.MainLoop()
 
 
