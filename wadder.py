@@ -82,13 +82,14 @@ def doApp(self): #we can ignore self
 	wx.Exit()
 	
 	doWADder(wad, titleid, title, sound, dol, nandloader, langs, exchange)
-		
+	
+	app = wx.PySimpleApp() #hack! to get save file to work
 	dlg = wx.FileDialog(None, "Save completed WAD...", "", "", "Wii Channels (*.wad)|*.wad|All Files (*.*)|*.*", wx.SAVE)
 	if dlg.ShowModal() == wx.ID_OK:
 		shutil.move("out.wad", dlg.GetPath())
 	dlg.Destroy()
 	
-	sys.exit()
+	sys.exit(0)
 
 	
 def doWADder(wad, titleid = "", title = "", sound = "", dol = "", nandloader = "", langs = [], exchange = [], loop = 0):
@@ -165,7 +166,7 @@ def doWADder(wad, titleid = "", title = "", sound = "", dol = "", nandloader = "
 	dialog.Update(20, "Packing icon.bin...")
 	wii.IMD5(wii.LZ77(wii.U8("wadunpack/00000000_app_out/meta/icon_bin_out").pack()).compress()).add()
 	
-		dialog.Update(40, "Packing 00000000.app...")
+	dialog.Update(40, "Packing 00000000.app...")
 	wii.IMET(wii.U8("wadunpack/00000000_app_out").pack()).add(os.path.getsize("wadunpack/00000000_app_out/meta/icon.bin"), os.path.getsize("wadunpack/00000000_app_out/meta/banner.bin"), os.path.getsize("wadunpack/00000000_app_out/meta/sound.bin"), title, langs)
 	
 	if(dol != ""):
@@ -410,7 +411,7 @@ class WADder(wx.App):
 
 if(__name__ == '__main__'):
 	clean()
-	wadder = WADder(redirect=False)
+	wadder = WADder(redirect = False)
 	wadder.MainLoop()
 
 
