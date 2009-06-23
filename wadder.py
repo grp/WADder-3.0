@@ -92,7 +92,9 @@ def doApp(self): #we can ignore self
 
 	
 def doWADder(wad, titleid = "", title = "", sound = "", dol = "", nandloader = "", langs = [], exchange = [], loop = 0):
-	dialog = wx.ProgressDialog("Progress", "Copying WAD...                                      ", maximum = 100, style = wx.PD_SMOOTH | wx.PD_AUTO_HIDE)
+	dialog = wx.ProgressDialog("Progress", " " * 50, maximum = 100, style = wx.PD_SMOOTH | wx.PD_AUTO_HIDE)
+	
+	dialog.Update(0, "Copying WAD...")
 	shutil.copy(wad, "in.wad")
 
 	dialog.Update(10, "Unpacking WAD...")
@@ -154,14 +156,20 @@ def doWADder(wad, titleid = "", title = "", sound = "", dol = "", nandloader = "
 	imedit = ImageEditor(redirect=False)
 	dialog.Update(100, "Complete!")
 	imedit.MainLoop()
-
+	
+	dialog = wx.ProgressDialog("Progress", " " * 50, maximum = 100, style = wx.PD_SMOOTH | wx.PD_AUTO_HIDE)
+	
+	dialog.Update(0, "Packing banner.bin...")
 	wii.IMD5(wii.LZ77(wii.U8("wadunpack/00000000_app_out/meta/banner_bin_out").pack()).compress()).add()
+	
+	dialog.Update(20, "Packing icon.bin...")
 	wii.IMD5(wii.LZ77(wii.U8("wadunpack/00000000_app_out/meta/icon_bin_out").pack()).compress()).add()
+	
+		dialog.Update(40, "Packing 00000000.app...")
 	wii.IMET(wii.U8("wadunpack/00000000_app_out").pack()).add(os.path.getsize("wadunpack/00000000_app_out/meta/icon.bin"), os.path.getsize("wadunpack/00000000_app_out/meta/banner.bin"), os.path.getsize("wadunpack/00000000_app_out/meta/sound.bin"), title, langs)
 	
-	shutil.copy("wadunpack/00000000.app", "new.app")
-	
 	if(dol != ""):
+		dialog.Update(60, "Inserting new DOL...")
 		shutil.copy("wadunpack/00000000.app", "00000000.app")
 		shutil.copy("wadunpack/tik", "tik")
 		shutil.copy("wadunpack/cert", "cert")
@@ -178,7 +186,7 @@ def doWADder(wad, titleid = "", title = "", sound = "", dol = "", nandloader = "
 		shutil.move("tik", "wadunpack/tik")
 		shutil.move("cert", "wadunpack/cert")
 		
-		
+	dialog.Update(80, "Updating Ticket and TMD...")
 	tmd = wii.TMD("wadunpack/tmd")
 	tik = wii.Ticket("wadunpack/tik")
 	
@@ -192,6 +200,7 @@ def doWADder(wad, titleid = "", title = "", sound = "", dol = "", nandloader = "
 	tmd.dump()
 	tik.dump()
 	
+	dialog.Update(100, "Packing WAD...")
 	wii.WAD("wadunpack").pack("out.wad")
 	
 class ImagePanel(wx.Panel):
