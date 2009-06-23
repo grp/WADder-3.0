@@ -6,8 +6,8 @@ import os, wx, hashlib, shutil, sys, threading, time, struct
 import Wii as wii
 
 def debug(text):
-	if text != "":
-		print text #comment this out to not debug
+	if(text != ""):
+		#print text #comment this out to not debug
 		pass
 		
 def clean():
@@ -41,15 +41,14 @@ def doApp(self): #we can ignore self
 		return
 		
 	wad = wadder.wadtab.wad.GetValue()
-	if(os.path.exists(wad) != True):
-		wx.MessageBox('WAD must be entered and WAD selected must exist.', 'Error', wx.OK | wx.ICON_ERROR)
-		return
-		
-	#sound = wadder.opttab.sound.GetValue()
-	#if(os.path.exists(sound) != True and sound != ""):
-	#	wx.MessageBox('Sound selected must exist.', 'Error')
+	#if(os.path.exists(wad) != True):
+	#	wx.MessageBox('WAD must be entered and WAD selected must exist.', 'Error', wx.OK | wx.ICON_ERROR)
 	#	return
-	sound = ""
+		
+	sound = wadder.opttab.sound.GetValue()
+	if(os.path.exists(sound) != True and sound != ""):
+		wx.MessageBox('Sound selected must exist.', 'Error')
+		return
 		
 	title = wadder.titletab.channame.GetValue()
 	if(len(title) > 20):
@@ -93,23 +92,31 @@ def doApp(self): #we can ignore self
 
 	
 def doWADder(wad, titleid = "", title = "", sound = "", dol = "", nandloader = "", langs = [], exchange = [], loop = 0):
+	dialog = wx.ProgressDialog("Progress", "Copying WAD...                                      ", maximum = 100, style = wx.PD_SMOOTH | wx.PD_AUTO_HIDE)
 	shutil.copy(wad, "in.wad")
 
+	dialog.Update(10, "Unpacking WAD...")
 	wii.WAD("in.wad").unpack("wadunpack")
-	shutil.copy("wadunpack/00000000.app", "old.app")
+	
+	
 	if(title == ""):
 		title = wii.IMET("wadunpack/00000000.app").getTitle()
+	dialog.Update(20, "Unpacking 00000000.app...")
 	wii.U8(wii.IMET("wadunpack/00000000.app").remove()).unpack()
 	
+	prog = 20
 	for i, item in enumerate(exchange):
 		if(item == ""): #skip what doesn't get changed
 			continue
 		if(i == 0):
 			bin = "banner.bin"
+			dialog.Update(prog + (i * 10), "Replacing banner.bin...")
 		elif(i == 1):
 			bin = "icon.bin"
+			dialog.Update(prog + (i * 10), "Replacing icon.bin...")
 		else:
 			bin = "sound.bin"
+			dialog.Update(prog + (i * 10), "Replacing sound.bin...")
 		
 		if(item[len(item) - 3:] == "wad"):
 			shutil.copy(item, "in.wad")
@@ -133,14 +140,20 @@ def doWADder(wad, titleid = "", title = "", sound = "", dol = "", nandloader = "
 			else:
 				continue #only bin, wad, bnr and app are supported
 		shutil.copy("bintemp/00000000_app_out/meta/" + bin, "wadunpack/00000000_app_out/meta/" + bin)
-
+	
+	dialog.Update(60, "Unpacking banner.bin...")
 	wii.U8(wii.LZ77(wii.IMD5("wadunpack/00000000_app_out/meta/banner.bin").remove()).decompress()).unpack()
+	dialog.Update(70, "Unpacking icon.bin...")
 	wii.U8(wii.LZ77(wii.IMD5("wadunpack/00000000_app_out/meta/icon.bin").remove()).decompress()).unpack()
 	
-	#do sound stuff, dis is teh hard partz
+	#BNS thanks to the awesome megazig!
+	dialog.Update(80, "Replacing and encoding sound...")
+	#do sound here
 	
-	#self.imedit = ImageEditor(redirect=False)
-	#self.imedit.MainLoop()
+	dialog.Update(90, "Loading editor...")
+	imedit = ImageEditor(redirect=False)
+	dialog.Update(100, "Complete!")
+	imedit.MainLoop()
 
 	wii.IMD5(wii.LZ77(wii.U8("wadunpack/00000000_app_out/meta/banner_bin_out").pack()).compress()).add()
 	wii.IMD5(wii.LZ77(wii.U8("wadunpack/00000000_app_out/meta/icon_bin_out").pack()).compress()).add()
@@ -176,16 +189,11 @@ def doWADder(wad, titleid = "", title = "", sound = "", dol = "", nandloader = "
 		tmd.setTitleID(newtitleid)
 		tik.setTitleID(newtitleid)
 	
-	
 	tmd.dump()
 	tik.dump()
 	
 	wii.WAD("wadunpack").pack("out.wad")
 	
-	return
-
-	
-
 class ImagePanel(wx.Panel):
 	def __init__(self, parent, id, dir):
 		wx.Panel.__init__(self, parent, id)
@@ -209,19 +217,23 @@ class ImagePanel(wx.Panel):
 		self.Show(True)
 	def replacebutton(self, evt):
 		dlg = wx.FileDialog(self, "Choose a an image to replace...", "", "", "PNG images (*.png)|*.png|All Files (*.*)|*.*", wx.OPEN)
-		(width, height) = wii.TPL(self.dir + "/" + self.list.GetStringSelection()).getSizes()
-		if dlg.ShowModal() == wx.ID_OK:
-			wii.TPL(dlg.GetPath()).toTPL(self.dir + "/" + self.list.GetStringSelection(), width, height)
+		sizes = wii.TPL(self.dir + "/" + self.list.GetStringSelection()).getSizes()
+		if(dlg.ShowModal() == wx.ID_OK):
+			import random
+			formats = ["RGBA8", "RGB565", "RGB5A3", "IA8", "I4", "I8", "IA4"]
+			format = formats[random.randrange(len(formats))]
+			wii.TPL(dlg.GetPath()).toTPL(self.dir + "/" + self.list.GetStringSelection(), sizes, format)
+			print format, "\n"
 		dlg.Destroy()
 	def viewbutton(self, evt):
 		wii.TPL(self.dir + "/" + self.list.GetStringSelection()).toScreen()
 	def extractbutton(self, evt):
-		dlg = wx.FileDialog(self, "Choose a location to save...", "", "", "PNG images (*.png)|*.png|All Files (*.*)|*.*", wx.SAVE)
+		dlg = wx.FileDialog(self, "Choose a location to save...", "", "", "PNG Files (*.png)|*.png|All Files (*.*)|*.*", wx.SAVE)
 		if dlg.ShowModal() == wx.ID_OK:
-			wii.TPL(self.dir + "/" + self.list.GetStringSelection()).toPNG(dlg.GetPath())
+			wii.TPL(self.dir + "/" + self.list.GetStringSelection()).toImage(dlg.GetPath())
 		dlg.Destroy()
 	def close(self, evt):
-		pass
+		wx.Exit() #not working, fixme
 
 class ImageEditor(wx.App):
 	def OnInit(self):
@@ -307,13 +319,13 @@ class OptPanel(wx.Panel):
 		self.Bind(wx.EVT_BUTTON, self.dolbutton, dolbtn)
 		self.dol = wx.TextCtrl(self, -1, "", (90, 40), (245, -1))
 		
-		#wx.StaticText(self, -1, "New Sound:", (5, 103))
-		#soundbtn = wx.Button(self, -1, "Browse...", (340, 100), (80, -1))
-		#self.Bind(wx.EVT_BUTTON, self.soundbutton, soundbtn)
-		#self.sound = wx.TextCtrl(self, -1, "", (90, 100), (245, -1))
-		#self.loop = wx.CheckBox(self, -1, "Loop Sound. Windows only, might not work :(.", (50, 130))
+		wx.StaticText(self, -1, "New Sound:", (5, 103))
+		soundbtn = wx.Button(self, -1, "Browse...", (340, 100), (80, -1))
+		self.Bind(wx.EVT_BUTTON, self.soundbutton, soundbtn)
+		self.sound = wx.TextCtrl(self, -1, "", (90, 100), (245, -1))
+		self.loop = wx.CheckBox(self, -1, "Loop Sound.", (50, 130))
 		
-		wx.StaticText(self, -1, "These are optional. Fill them in only if you want to change them.", (5, 180))
+		wx.StaticText(self, -1, "These are optional. Fill them in only if you want to change them.\nSound is converted to BNS format.", (5, 170))
 		
 	def soundbutton(self, evt):
 		dlg = wx.FileDialog(self, "Choose a sound...", "", "", "MP3 Files (*.mp3)|*.mp3|WAV Files (*.wav)|*.wav|All Files (*.*)|*.*", wx.OPEN)
